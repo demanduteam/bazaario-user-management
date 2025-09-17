@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bazaario - Standalone User Management</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        vazir: ['Vazirmatn', 'sans-serif'],
+                    },
+                },
+            },
+        }
+    </script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jalaali-js/dist/jalaali.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Vazirmatn', sans-serif;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .modal-content {
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: scale(0.95);
+            transition: transform 0.3s ease-in-out;
+        }
+        .modal-overlay.open .modal-content {
+            transform: scale(1);
+        }
+        .modal-content::-webkit-scrollbar { width: 8px; }
+        .dark .modal-content::-webkit-scrollbar-track { background: #2d3748; }
+        .dark .modal-content::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 10px; border: 2px solid #2d3748; }
+        .light .modal-content::-webkit-scrollbar-track { background: #e5e7eb; }
+        .light .modal-content::-webkit-scrollbar-thumb { background-color: #9ca3af; border-radius: 10px; border: 2px solid #e5e7eb; }
+        
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 14px;
+            height: 14px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        // ==================================================
+        // Supabase Client Setup
+        // ==================================================
+        const { createClient } = supabase;
+        const supabaseUrl = 'https://wehyjatotbzxargnxasg.supabase.co';
+        // FIXME: The previous API key was invalid. Please replace the placeholder below with your correct Supabase anonymous key.
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlaHlqYXRvdGJ6eGFyZ254YXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MTIwMjEsImV4cCI6MjA2NzQ4ODAyMX0.2R448DuEBlTrNvaYXiYZ8D5M7MJNv7n1qmIDHQBNFiY';
+        const supabaseClient = createClient(supabaseUrl, supabaseKey, { global: { fetch: window.fetch.bind(window) } });
+
+        // ==================================================
+        // Helper UI Components & Functions
+        // ==================================================
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="modal-overlay open" onClick={onClose}>
+                    <div className="modal-content bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 dark:border-gray-600">
+                            <h2 className="text-xl font-bold">{title}</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
+                        </div>
+                        {children}
+                    </div>
+                </div>
+            );
+        };
+
+        const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
+            if (!isOpen) return null;
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title={title}>
+                    <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
+                    <div className="flex flex-col sm:flex-row justify-end gap-3">
+                        <button type="button" onClick={onClose} className="w-full sm:w-auto bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-bold py-2 px-4 rounded-lg">لغو</button>
+                        <button type="button" onClick={onConfirm} className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">تایید</button>
+                    </div>
+                </Modal>
+            );
+        };
+        
+        const SearchableSelect = ({ options, value, onChange, placeholder, disabled = false }) => {
+            const [searchTerm, setSearchTerm] = React.useState('');
+            const [isOpen, setIsOpen] = React.useState(false);
+            const wrapperRef = React.useRef(null);
+
+            const selectedOption = React.useMemo(() => options.find(opt => opt.id === value), [options, value]);
+
+            const filteredOptions = React.useMemo(() => {
+                if (!searchTerm) return options;
+                return options.filter(opt =>
+                    opt.title.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+            }, [options, searchTerm]);
+
+            React.useEffect(() => {
+                function handleClickOutside(event) {
+                    if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+                        setIsOpen(false);
+                        setSearchTerm('');
+                    }
+                }
+                document.addEventListener("mousedown", handleClickOutside);
+                return () => document.removeEventListener("mousedown", handleClickOutside);
+            }, [wrapperRef]);
+
+            const handleSelect = (option) => {
+                onChange(option.id);
+                setSearchTerm('');
+                setIsOpen(false);
+            };
+
+            return (
+                <div className="relative" ref={wrapperRef}>
+                    <input
+                        type="text"
+                        placeholder={selectedOption ? selectedOption.title : placeholder}
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                        onFocus={() => setIsOpen(true)}
+                        disabled={disabled}
+                        className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                    />
+                    {isOpen && !disabled && (
+                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {filteredOptions.length > 0 ? (
+                                filteredOptions.map(option => (
+                                    <div
+                                        key={option.id}
+                                        onClick={() => handleSelect(option)}
+                                        className="p-2 hover:bg-indigo-100 dark:hover:bg-indigo-800 cursor-pointer"
+                                    >
+                                        {option.title}
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="p-2 text-gray-500">موردی یافت نشد.</div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+        
+        const GenericManager = ({ onSave, title, tableName, items: initialItems, confirmModal, onManageAttributes, attributeLabel }) => {
+            const [items, setItems] = React.useState(initialItems);
+            const [newItemName, setNewItemName] = React.useState('');
+            const [editingItem, setEditingItem] = React.useState(null);
+            const [isLoading, setIsLoading] = React.useState(false);
+            const [error, setError] = React.useState('');
+
+            React.useEffect(() => {
+                setItems(initialItems);
+            }, [initialItems]);
+
+            const handleAddItem = async (e) => {
+                e.preventDefault();
+                if (!newItemName.trim()) return;
+                setIsLoading(true);
+                setError('');
+
+                const { data, error } = await supabaseClient.from(tableName).insert({ title: newItemName.trim() }).select().single();
+                if (error) {
+                    setError(`خطا در افزودن: ${error.message}`);
+                } else {
+                    setItems(prev => [...prev, data]);
+                    setNewItemName('');
+                    onSave(); // Notify parent to refetch all data
+                }
+                setIsLoading(false);
+            };
+
+            const handleUpdateItem = async () => {
+                if (!editingItem || !editingItem.title.trim()) return;
+                setIsLoading(true);
+                setError('');
+
+                const { error } = await supabaseClient.from(tableName).update({ title: editingItem.title.trim() }).eq('id', editingItem.id);
+                if (error) {
+                    setError(`خطا در به‌روزرسانی: ${error.message}`);
+                } else {
+                    setItems(prev => prev.map(item => item.id === editingItem.id ? editingItem : item));
+                    setEditingItem(null);
+                    onSave();
+                }
+                setIsLoading(false);
+            };
+
+            const requestDeleteItem = (item) => {
+                confirmModal({
+                    isOpen: true,
+                    message: `آیا از حذف "${item.title}" اطمینان دارید؟ این عمل ممکن است باعث خطا در موارد مرتبط شود.`,
+                    onConfirm: () => executeDeleteItem(item.id)
+                });
+            };
+
+            const executeDeleteItem = async (itemId) => {
+                setIsLoading(true);
+                setError('');
+                const { error } = await supabaseClient.from(tableName).delete().eq('id', itemId);
+                if (error) {
+                    setError(`خطا در حذف. ممکن است این مورد توسط آیتم دیگری استفاده شده باشد.`);
+                    console.error("Delete error:", error);
+                } else {
+                    setItems(prev => prev.filter(item => item.id !== itemId));
+                    onSave();
+                }
+                setIsLoading(false);
+            };
+            
+            return (
+                <div className="space-y-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h2 className="text-xl font-bold mb-4">{`لیست ${title}`}</h2>
+                    <form onSubmit={handleAddItem} className="flex gap-2">
+                        <input
+                            type="text"
+                            value={newItemName}
+                            onChange={(e) => setNewItemName(e.target.value)}
+                            placeholder={`افزودن ${title} جدید...`}
+                            className="flex-grow bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                        />
+                        <button type="submit" disabled={isLoading} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-green-400">
+                            افزودن
+                        </button>
+                    </form>
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                    <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+                        {items.map(item => (
+                            <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
+                                {editingItem?.id === item.id ? (
+                                    <input
+                                        type="text"
+                                        value={editingItem.title}
+                                        onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
+                                        className="flex-grow bg-white dark:bg-gray-600 p-1 rounded-md"
+                                        autoFocus
+                                        onBlur={handleUpdateItem}
+                                        onKeyDown={e => e.key === 'Enter' && handleUpdateItem()}
+                                    />
+                                ) : (
+                                    <span className="text-gray-800 dark:text-gray-200">{item.title}</span>
+                                )}
+                                <div className="flex-shrink-0 space-x-2 space-x-reverse">
+                                    {onManageAttributes && (
+                                        <button onClick={() => onManageAttributes(item)} className="text-sm text-green-500 hover:underline">{attributeLabel || 'مدیریت'}</button>
+                                    )}
+                                    {editingItem?.id === item.id ? (
+                                        <button onClick={() => setEditingItem(null)} className="text-sm text-gray-500 hover:underline">لغو</button>
+                                    ) : (
+                                        <button onClick={() => setEditingItem(item)} className="text-sm text-indigo-500 hover:underline">ویرایش</button>
+                                    )}
+                                    <button onClick={() => requestDeleteItem(item)} disabled={isLoading} className="text-sm text-red-500 hover:underline">حذف</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        
+        // ==================================================
+        // Address Form Components
+        // ==================================================
+        const AddressFormFields = ({ formData, setFormData, provinces, dynamicAttributes, attributeValues, onAttributeChange, shippingCompanies }) => {
+            const [cities, setCities] = React.useState([]);
+            const [isLoadingCities, setIsLoadingCities] = React.useState(false);
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSelectChange = (name, value) => {
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            React.useEffect(() => {
+                const fetchCities = async () => {
+                    if (formData.provinceid) {
+                        setIsLoadingCities(true);
+                        setFormData(prev => ({ ...prev, cityid: '' }));
+                        const { data } = await supabaseClient.from('city').select('*').eq('provinceid', formData.provinceid).order('title');
+                        setCities(data || []);
+                        setIsLoadingCities(false);
+                    } else {
+                        setCities([]);
+                    }
+                };
+                fetchCities();
+            }, [formData.provinceid]);
+
+            return (
+                <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">استان</label>
+                            <SearchableSelect
+                                options={provinces}
+                                value={formData.provinceid}
+                                onChange={(id) => handleSelectChange('provinceid', id)}
+                                placeholder="جستجو یا انتخاب استان..."
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شهر</label>
+                            <SearchableSelect
+                                options={cities}
+                                value={formData.cityid}
+                                onChange={(id) => handleSelectChange('cityid', id)}
+                                placeholder={isLoadingCities ? 'در حال بارگذاری...' : "جستجو یا انتخاب شهر..."}
+                                disabled={!formData.provinceid || isLoadingCities}
+                            />
+                        </div>
+                   </div>
+                   <div>
+                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">آدرس کامل</label>
+                        <textarea name="address" value={formData.address || ''} onChange={handleChange} rows="3" placeholder="خیابان، کوچه، و ..." className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"></textarea>
+                   </div>
+                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره پلاک</label>
+                            <input type="text" name="plaque" value={formData.plaque || ''} onChange={handleChange} placeholder="پلاک" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">کد پستی</label>
+                            <input type="text" name="postalcode" value={formData.postalcode || ''} onChange={handleChange} placeholder="کد پستی ۱۰ رقمی" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                        </div>
+                   </div>
+                   <div>
+                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شرکت حمل و نقل ترجیحی</label>
+                        <select name="preferredshippingcompanyid" value={formData.preferredshippingcompanyid || ''} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
+                            <option value="">انتخاب شرکت...</option>
+                            {shippingCompanies.map(company => <option key={company.id} value={company.id}>{company.title}</option>)}
+                        </select>
+                    </div>
+                   {dynamicAttributes && dynamicAttributes.length > 0 && (
+                        <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4">
+                            <h4 className="text-md font-semibold mb-2">اطلاعات تکمیلی آدرس</h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {dynamicAttributes.map(attr => {
+                                    let inputField;
+                                    switch (attr.data_type) {
+                                        case 'select':
+                                            const options = Array.isArray(attr.options) ? attr.options : [];
+                                            inputField = (
+                                                <select
+                                                    value={attributeValues[attr.id] || ''}
+                                                    onChange={(e) => onAttributeChange(attr.id, e.target.value)}
+                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                >
+                                                    <option value="">انتخاب کنید...</option>
+                                                    {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                </select>
+                                            );
+                                            break;
+                                        case 'integer':
+                                            inputField = (
+                                                <input
+                                                    type="number"
+                                                    value={attributeValues[attr.id] || ''}
+                                                    onChange={(e) => onAttributeChange(attr.id, e.target.value)}
+                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                />
+                                            );
+                                            break;
+                                        default: // 'text' and any other case
+                                            inputField = (
+                                                <input
+                                                    type="text"
+                                                    value={attributeValues[attr.id] || ''}
+                                                    onChange={(e) => onAttributeChange(attr.id, e.target.value)}
+                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                />
+                                            );
+                                    }
+                                    return (
+                                        <div key={attr.id}>
+                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">{attr.title}</label>
+                                            {inputField}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                   )}
+                </div>
+            )
+        };
+        
+        const AddressForm = ({ user, roleId, address, onSave, onCancel, provinces, shippingCompanies, isNewUserFlow = false }) => {
+            const initialAddress = {
+                provinceid: '', cityid: '', address: '', postalcode: '', plaque: '', preferredshippingcompanyid: ''
+            };
+            const [addressData, setAddressData] = React.useState(initialAddress);
+            const [dynamicAttributes, setDynamicAttributes] = React.useState([]);
+            const [attributeValues, setAttributeValues] = React.useState({});
+            const [isLoading, setIsLoading] = React.useState(false);
+            const [error, setError] = React.useState('');
+
+            React.useEffect(() => {
+                if (roleId) {
+                    const fetchAttributes = async () => {
+                        const { data, error } = await supabaseClient
+                            .from('role_location_attribute')
+                            .select('location_attribute_key(*)')
+                            .eq('role_id', roleId);
+                        
+                        if (error) console.error("Error fetching role attributes:", error);
+                        else setDynamicAttributes(data.map(item => item.location_attribute_key));
+                    };
+                    fetchAttributes();
+                } else {
+                    setDynamicAttributes([]);
+                }
+            }, [roleId]);
+
+            React.useEffect(() => {
+                if (address) { // Editing
+                    setAddressData({
+                        provinceid: address.provinceid || '',
+                        cityid: address.cityid || '',
+                        address: address.address || '',
+                        postalcode: address.postalcode || '',
+                        plaque: address.plaque || '',
+                        preferredshippingcompanyid: address.preferredshippingcompanyid || ''
+                    });
+
+                    const fetchAttributeValues = async () => {
+                        const { data, error } = await supabaseClient
+                            .from('location_attribute_value')
+                            .select('attribute_id, value')
+                            .eq('location_id', address.id);
+                        
+                        if (error) console.error("Error fetching attribute values:", error);
+                        else {
+                            const values = data.reduce((acc, curr) => {
+                                acc[curr.attribute_id] = curr.value;
+                                return acc;
+                            }, {});
+                            setAttributeValues(values);
+                        }
+                    };
+                    fetchAttributeValues();
+
+                } else { // Adding new
+                    setAddressData(initialAddress);
+                    setAttributeValues({});
+                }
+            }, [address]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                
+                if (isNewUserFlow) {
+                    onSave(addressData);
+                    return;
+                }
+
+                setIsLoading(true);
+                const locationFields = {
+                    title: `آدرس ${user.fullname}`,
+                    address: addressData.address,
+                    postalcode: addressData.postalcode,
+                    provinceid: addressData.provinceid || null,
+                    cityid: addressData.cityid || null,
+                    plaque: addressData.plaque || null,
+                    preferredshippingcompanyid: addressData.preferredshippingcompanyid || null
+                };
+
+                try {
+                    let locationId;
+                    if (address) { // Update existing location
+                        const { data, error } = await supabaseClient.from('location').update(locationFields).eq('id', address.id).select().single();
+                        if (error) throw error;
+                        locationId = data.id;
+                    } else { // Insert new location and link it
+                        if (!locationFields.address && !locationFields.cityid) {
+                            onCancel(); 
+                            return;
+                        }
+                        const { data: newLocation, error: insertError } = await supabaseClient.from('location').insert(locationFields).select().single();
+                        if (insertError) throw insertError;
+                        locationId = newLocation.id;
+                        
+                        const { error: linkError } = await supabaseClient.from('userlocation').insert({ userid: user.id, locationid: locationId });
+                        if (linkError) throw linkError;
+                    }
+
+                    // Save dynamic attributes
+                    if (locationId) {
+                        await supabaseClient.from('location_attribute_value').delete().eq('location_id', locationId);
+
+                        const valuesToInsert = Object.entries(attributeValues)
+                            .filter(([key, value]) => value)
+                            .map(([key, value]) => ({
+                                location_id: locationId,
+                                attribute_id: parseInt(key),
+                                value: value
+                            }));
+                        
+                        if (valuesToInsert.length > 0) {
+                            const { error: attrError } = await supabaseClient.from('location_attribute_value').insert(valuesToInsert);
+                            if (attrError) throw attrError;
+                        }
+                    }
+                    onSave();
+                } catch (err) {
+                    console.error("Address save error:", err);
+                    setError(err.message || "خطا در ذخیره آدرس.");
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="p-4 border border-gray-300 dark:border-gray-600 rounded-lg space-y-4">
+                    <h4 className="text-md font-semibold">{address ? 'ویرایش آدرس' : 'افزودن آدرس جدید'}</h4>
+                    <AddressFormFields 
+                        formData={addressData} 
+                        setFormData={setAddressData} 
+                        provinces={provinces}
+                        shippingCompanies={shippingCompanies}
+                        dynamicAttributes={dynamicAttributes}
+                        attributeValues={attributeValues}
+                        onAttributeChange={(id, value) => setAttributeValues(prev => ({...prev, [id]: value}))}
+                    />
+                    {error && <p className="text-red-500 text-sm">{error}</p>}
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button type="button" onClick={onCancel} className="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white py-1.5 px-4 rounded-lg">انصراف</button>
+                        <button type="submit" disabled={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 px-4 rounded-lg disabled:bg-indigo-400">ذخیره آدرس</button>
+                    </div>
+                </form>
+            );
+        };
+        
+        // ==================================================
+        // User Form & Management Components
+        // ==================================================
+        const UserForm = ({ isOpen, onClose, onSave, user, appData }) => {
+            const { roles, provinces, marketingChannels, shippingCompanies } = appData;
+            const initialFormData = {
+                fullname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: ''
+            };
+            const [formData, setFormData] = React.useState(initialFormData);
+            const [isChecking, setIsChecking] = React.useState(false);
+            const [existingUser, setExistingUser] = React.useState(null);
+            const [error, setError] = React.useState('');
+            const customerRoleId = React.useMemo(() => roles.find(r => r.title === 'Customer')?.id, [roles]);
+            
+            const [showAddressForm, setShowAddressForm] = React.useState(false);
+            const [editingAddress, setEditingAddress] = React.useState(null);
+            const [userLocations, setUserLocations] = React.useState([]);
+            const [newAddresses, setNewAddresses] = React.useState([]);
+
+            const fetchUserLocations = async (userId) => {
+                if (!userId) return;
+                const { data, error } = await supabaseClient
+                    .from('userlocation')
+                    .select('*, location(*, city(*, province(*)))')
+                    .eq('userid', userId);
+                if (error) console.error("Error fetching user locations:", error);
+                else setUserLocations(data || []);
+            };
+
+            React.useEffect(() => {
+                if (isOpen) {
+                    setError('');
+                    setShowAddressForm(false);
+                    setEditingAddress(null);
+                    setNewAddresses([]);
+
+                    if (user) {
+                        setFormData({
+                            ...initialFormData,
+                            fullname: user.fullname || '',
+                            email: user.email?.endsWith('@placeholder.email') ? '' : user.email || '',
+                            mobile: user.mobile || '',
+                            emergencyphonenumber: user.emergencyphonenumber || '',
+                            roleid: user.role?.id || '',
+                            marketingchannelid: user.marketingchannelid || '',
+                        });
+                        setExistingUser(user);
+                        fetchUserLocations(user.id);
+                    } else {
+                        setFormData({ ...initialFormData, roleid: customerRoleId || '' });
+                        setExistingUser(null);
+                        setUserLocations([]);
+                    }
+                }
+            }, [user, isOpen, customerRoleId]);
+
+            const handleMobileChange = async (e) => {
+                const mobile = e.target.value;
+                setFormData(prev => ({ ...prev, mobile }));
+                setError('');
+
+                if (mobile && mobile.length >= 10) { 
+                    setIsChecking(true);
+                    const { data } = await supabaseClient.from('profiles').select('*, role(id, title)').eq('mobile', mobile).single();
+                    if (data) {
+                        setFormData(prev => ({
+                            ...prev,
+                            fullname: data.fullname || '',
+                            email: data.email?.endsWith('@placeholder.email') ? '' : data.email || '',
+                            emergencyphonenumber: data.emergencyphonenumber || '',
+                            roleid: data.role?.id || customerRoleId,
+                            marketingchannelid: data.marketingchannelid || '',
+                        }));
+                        setExistingUser(data);
+                        fetchUserLocations(data.id);
+                        setShowAddressForm(false);
+                    } else {
+                        setFormData(prev => ({ ...initialFormData, mobile: prev.mobile, roleid: customerRoleId || '' }));
+                        setExistingUser(null);
+                        setUserLocations([]);
+                        setShowAddressForm(false);
+                    }
+                    setIsChecking(false);
+                } else {
+                    setExistingUser(null);
+                    setUserLocations([]);
+                }
+            };
+
+            const handleChange = (e) => {
+                const { name, value } = e.target;
+                setFormData(prev => ({ ...prev, [name]: value }));
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setError('');
+                if (!formData.mobile) {
+                    setError('شماره موبایل اجباری است.');
+                    return;
+                }
+
+                try {
+                    const profileData = {
+                        fullname: formData.fullname,
+                        email: formData.email || `${formData.mobile}@placeholder.email`,
+                        emergencyphonenumber: formData.emergencyphonenumber || null,
+                        roleid: formData.roleid,
+                        marketingchannelid: formData.marketingchannelid || null,
+                    };
+
+                    if (existingUser) { // UPDATE USER
+                        const { error: profileError } = await supabaseClient
+                            .from('profiles')
+                            .update(profileData)
+                            .eq('id', existingUser.id);
+                        if (profileError) throw profileError;
+                        onSave();
+                        onClose();
+
+                    } else { // CREATE NEW USER
+                        const password = formData.mobile.slice(-6);
+                        if (password.length < 6) throw new Error('شماره موبایل باید معتبر باشد.');
+                        
+                        const { data: authData, error: authError } = await supabaseClient.auth.signUp({ email: profileData.email, password });
+                        if (authError) throw new Error(authError.message.includes("User already registered") ? "کاربری با این ایمیل یا شماره موبایل قبلا ثبت‌نام کرده است." : "خطا در ایجاد کاربر.");
+                        
+                        if (authData.user) {
+                            const { error: profileError } = await supabaseClient
+                                .from('profiles')
+                                .update({ ...profileData, mobile: formData.mobile })
+                                .eq('id', authData.user.id);
+                            if (profileError) throw profileError;
+                            
+                            for (const addr of newAddresses) {
+                                const locationFields = {
+                                    title: `آدرس ${formData.fullname}`,
+                                    address: addr.address,
+                                    postalcode: addr.postalcode,
+                                    provinceid: addr.provinceid || null,
+                                    cityid: addr.cityid || null,
+                                    plaque: addr.plaque || null,
+                                    preferredshippingcompanyid: addr.preferredshippingcompanyid || null
+                                };
+                                const { data: locationData, error: locationError } = await supabaseClient.from('location').insert(locationFields).select().single();
+                                if (locationError) throw new Error('خطا در ذخیره آدرس.');
+                                if (locationData) {
+                                    const { error: userLocationError } = await supabaseClient.from('userlocation').insert({ userid: authData.user.id, locationid: locationData.id });
+                                    if (userLocationError) throw new Error('خطا در اتصال آدرس به کاربر.');
+                                }
+                            }
+                            onSave();
+                            onClose();
+                        }
+                    }
+                } catch (err) {
+                    console.error("Submit error:", err);
+                    setError(err.message || "یک خطای ناشناخته رخ داد.");
+                }
+            };
+
+            const handleAddressSaved = () => {
+                setShowAddressForm(false);
+                setEditingAddress(null);
+                fetchUserLocations(existingUser.id);
+                onSave();
+            };
+
+            const handleDeleteAddress = async (locationId) => {
+                const { error: linkError } = await supabaseClient.from('userlocation').delete().eq('locationid', locationId).eq('userid', existingUser.id);
+                if (linkError) {
+                    setError("خطا در حذف اتصال آدرس به کاربر.");
+                    console.error(linkError);
+                    return;
+                }
+
+                const { error: locationError } = await supabaseClient.from('location').delete().eq('id', locationId);
+                if (locationError) {
+                    setError("خطا در حذف آدرس.");
+                    console.error(locationError);
+                    return;
+                }
+
+                fetchUserLocations(existingUser.id);
+                onSave();
+            };
+
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title={user ? 'ویرایش کاربر' : 'افزودن کاربر جدید'}>
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">اطلاعات کاربری</h3>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره موبایل</label>
+                            <div className="relative">
+                                <input type="tel" name="mobile" value={formData.mobile} onChange={handleMobileChange} placeholder="برای یافتن یا ایجاد کاربر وارد کنید" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required disabled={!!user} />
+                                {isChecking && <div className="spinner absolute left-3 top-1/2 -translate-y-1/2"></div>}
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">نام کامل</label>
+                            <input type="text" name="fullname" value={formData.fullname} onChange={handleChange} placeholder="نام کامل" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required />
+                        </div>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">ایمیل (اختیاری)</label>
+                                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="در صورت خالی بودن، با موبایل ساخته می‌شود" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره موبایل دوم</label>
+                                <input type="tel" name="emergencyphonenumber" value={formData.emergencyphonenumber} onChange={handleChange} placeholder="شماره تماس اضطراری" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">نقش</label>
+                                <select name="roleid" value={formData.roleid} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required>
+                                    {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">کانال جذب</label>
+                                <select name="marketingchannelid" value={formData.marketingchannelid} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
+                                    <option value="">انتخاب کانال...</option>
+                                    {marketingChannels.map(channel => <option key={channel.id} value={channel.id}>{channel.title}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                         {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
+                         {existingUser && !user && <p className="text-green-500 text-sm">کاربر یافت شد. اطلاعات فرم به‌روزرسانی خواهد شد.</p>}
+                         {!existingUser && formData.mobile.length >= 10 && !isChecking && <p className="text-blue-500 text-sm">کاربر جدید. رمز عبور پیش‌فرض: ۶ رقم آخر موبایل.</p>}
+                        <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
+                            <button type="button" onClick={onClose} className="w-full sm:w-auto bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white py-2 px-4 rounded-lg">بستن</button>
+                            <button type="submit" disabled={isChecking} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg disabled:bg-indigo-400">
+                                {existingUser ? 'به‌روزرسانی اطلاعات کاربر' : 'ایجاد کاربر'}
+                            </button>
+                        </div>
+                    </form>
+
+                    {/* Address Management Section */}
+                    <div className="border-t border-gray-200 dark:border-gray-700 mt-6 pt-4 space-y-4">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">مدیریت آدرس‌ها</h3>
+                            {!showAddressForm && <button type="button" onClick={() => { setEditingAddress(null); setShowAddressForm(true); }} className="text-sm bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded-lg">+ افزودن آدرس</button>}
+                        </div>
+                        
+                        {existingUser && userLocations.length > 0 && !showAddressForm && (
+                            <div className="space-y-2">
+                                {userLocations.map(({ location }) => {
+                                    const fullAddress = `${location.city?.province?.title || ''}, ${location.city?.title || ''}, ${location.address || ''}, پلاک ${location.plaque || ''}, کدپستی ${location.postalcode || ''}`;
+                                    return (
+                                        <div key={location.id} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">{fullAddress}</p>
+                                            <div className="flex-shrink-0 space-x-2 space-x-reverse">
+                                                <button onClick={() => { setEditingAddress(location); setShowAddressForm(true); }} className="text-xs text-indigo-500 hover:underline">ویرایش</button>
+                                                <button onClick={() => handleDeleteAddress(location.id)} className="text-xs text-red-500 hover:underline">حذف</button>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+
+                        {!existingUser && newAddresses.length > 0 && !showAddressForm && (
+                             <div className="space-y-2">
+                                {newAddresses.map((addr, index) => {
+                                    const provinceName = provinces.find(p => p.id === addr.provinceid)?.title || '';
+                                    const cityName = appData.cities?.find(c => c.id === addr.cityid)?.title || '';
+                                    const fullAddress = `${provinceName}, ${cityName}, ${addr.address || ''}, پلاک ${addr.plaque || ''}, کدپستی ${addr.postalcode || ''}`;
+                                    return (
+                                        <div key={index} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">{fullAddress}</p>
+                                            <button onClick={() => setNewAddresses(prev => prev.filter((_, i) => i !== index))} className="text-xs text-red-500 hover:underline">حذف</button>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+
+                        {showAddressForm && (
+                            <AddressForm 
+                                user={existingUser || { fullname: formData.fullname, id: null }}
+                                roleId={formData.roleid}
+                                address={editingAddress}
+                                onSave={existingUser ? handleAddressSaved : (newAddress) => {
+                                    setNewAddresses(prev => [...prev, newAddress]);
+                                    setShowAddressForm(false);
+                                }}
+                                onCancel={() => { setShowAddressForm(false); setEditingAddress(null); }}
+                                provinces={provinces}
+                                shippingCompanies={shippingCompanies}
+                                isNewUserFlow={!existingUser}
+                            />
+                        )}
+                    </div>
+                </Modal>
+            );
+        };
+
+        const UserManagement = ({ appData, fetchData }) => {
+            const [users, setUsers] = React.useState([]);
+            const [isLoading, setIsLoading] = React.useState(true);
+            const [isModalOpen, setIsModalOpen] = React.useState(false);
+            const [editingUser, setEditingUser] = React.useState(null);
+            const [confirmState, setConfirmState] = React.useState({ isOpen: false, onConfirm: null, message: '' });
+            
+            const fetchUsers = async () => {
+                setIsLoading(true);
+                const { data, error } = await supabaseClient.from('profiles').select(`*, role(id, title), userlocation(location(*, city(*, province(title))))`).order('createdat', { ascending: false });
+                if (error) console.error(error);
+                else setUsers(data || []);
+                setIsLoading(false);
+            };
+
+            React.useEffect(() => {
+                fetchUsers();
+            }, []);
+
+            const refreshAllData = () => {
+                fetchUsers();
+                if (fetchData) fetchData(); // This refreshes parent appData if provided
+            };
+            
+            const handleOpenModal = (user = null) => { setEditingUser(user); setIsModalOpen(true); };
+            const handleCloseModal = () => { setIsModalOpen(false); setEditingUser(null); };
+            
+            const handleDeleteRequest = (userId, isDeleted) => {
+                setConfirmState({ isOpen: true, message: `آیا از ${isDeleted ? 'فعال کردن' : 'غیرفعال کردن'} این کاربر اطمینان دارید؟`, onConfirm: () => executeSoftDelete(userId, isDeleted) });
+            };
+            
+            const executeSoftDelete = async (userId, isDeleted) => {
+                const { error } = await supabaseClient.from('profiles').update({ isdeleted: !isDeleted }).eq('id', userId);
+                if (error) console.error('خطا: ', error.message);
+                else fetchUsers();
+                closeConfirmModal();
+            };
+            
+            const closeConfirmModal = () => { setConfirmState({ isOpen: false, onConfirm: null, message: '' }); };
+            
+            return (
+                <div>
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"><h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">مدیریت کاربران</h1><button onClick={() => handleOpenModal()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500" disabled={isLoading}>افزودن کاربر جدید</button></div>
+                    <div className="hidden md:block bg-white dark:bg-gray-800 p-4 rounded-lg shadow overflow-x-auto">
+                        <table className="w-full text-right">
+                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">نام کامل</th><th className="p-3">شماره موبایل</th><th className="p-3">استان</th><th className="p-3">شهر</th><th className="p-3">نقش</th><th className="p-3">وضعیت</th><th className="p-3">عملیات</th></tr></thead>
+                            <tbody>
+                                {isLoading ? (<tr><td colSpan="7" className="text-center p-4">در حال بارگذاری...</td></tr>) : (
+                                    users.map(user => {
+                                        const province = user.userlocation[0]?.location?.city?.province?.title || '-';
+                                        const city = user.userlocation[0]?.location?.city?.title || '-';
+                                        return (
+                                            <tr key={user.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${user.isdeleted ? 'opacity-50' : ''}`}>
+                                                <td className="p-3">{user.fullname || '-'}</td>
+                                                <td className="p-3">{user.mobile || '-'}</td>
+                                                <td className="p-3">{province}</td>
+                                                <td className="p-3">{city}</td>
+                                                <td className="p-3"><span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{user.role?.title || 'تعیین نشده'}</span></td>
+                                                <td className="p-3"><span className={`px-2 py-1 text-xs rounded-full ${user.isdeleted ? 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{user.isdeleted ? 'غیرفعال' : 'فعال'}</span></td>
+                                                <td className="p-3 flex items-center space-x-2 space-x-reverse"><button onClick={() => handleOpenModal(user)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-500">ویرایش</button><button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-500">{user.isdeleted ? 'فعال‌سازی' : 'غیرفعال‌سازی'}</button></td>
+                                            </tr>
+                                        )
+                                    }))}
+                            </tbody>
+                        </table>
+                    </div>
+                     <div className="md:hidden space-y-4">
+                         {isLoading ? (<p className="text-center p-4">در حال بارگذاری...</p>) : (
+                             users.map(user => {
+                                 const province = user.userlocation[0]?.location?.city?.province?.title || '-';
+                                 const city = user.userlocation[0]?.location?.city?.title || '-';
+                                 return (
+                                     <div key={user.id} className={`bg-white dark:bg-gray-800 p-4 rounded-lg shadow ${user.isdeleted ? 'opacity-60' : ''}`}>
+                                         <div className="flex justify-between items-center"><h3 className="font-bold text-lg text-gray-900 dark:text-white">{user.fullname || '-'}</h3><span className={`px-2 py-1 text-xs rounded-full ${user.isdeleted ? 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{user.isdeleted ? 'غیرفعال' : 'فعال'}</span></div>
+                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{user.mobile || '-'}</p>
+                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">استان: {province}</p>
+                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">شهر: {city}</p>
+                                         <div className="mt-2 text-sm"><span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{user.role?.title || 'تعیین نشده'}</span></div>
+                                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-4 space-x-reverse"><button onClick={() => handleOpenModal(user)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-500 font-semibold">ویرایش</button><button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-500 font-semibold">{user.isdeleted ? 'فعال‌سازی' : 'غیرفعال‌سازی'}</button></div>
+                                     </div>
+                                 )
+                             })
+                         )}
+                    </div>
+                    {isModalOpen && <UserForm isOpen={isModalOpen} onClose={handleCloseModal} onSave={refreshAllData} user={editingUser} appData={appData} />}
+                    <ConfirmModal isOpen={confirmState.isOpen} onClose={closeConfirmModal} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
+                </div>
+            );
+        };
+        
+        // ==================================================
+        // Settings / Attributes Management Component
+        // ==================================================
+        const SettingsManagement = ({ appData, fetchData }) => {
+            const [confirmState, setConfirmState] = React.useState({ isOpen: false, onConfirm: null, message: '' });
+            const [isAssignModalOpen, setIsAssignModalOpen] = React.useState(false);
+            const [selectedRole, setSelectedRole] = React.useState(null);
+
+            const handleManageRoleAttributes = (role) => {
+                setSelectedRole(role);
+                setIsAssignModalOpen(true);
+            };
+
+            const AssignRoleLocationAttributesModal = ({ isOpen, onClose, role, allAttributes, onSave }) => {
+                const [selectedAttributes, setSelectedAttributes] = React.useState(new Set());
+                const [isLoading, setIsLoading] = React.useState(true);
+
+                React.useEffect(() => {
+                    if (isOpen && role) {
+                        setIsLoading(true);
+                        supabaseClient
+                            .from('role_location_attribute')
+                            .select('attribute_id')
+                            .eq('role_id', role.id)
+                            .then(({ data, error }) => {
+                                if (error) console.error(error);
+                                else {
+                                    const initialSelected = new Set(data.map(item => item.attribute_id));
+                                    setSelectedAttributes(initialSelected);
+                                }
+                                setIsLoading(false);
+                            });
+                    }
+                }, [isOpen, role]);
+
+                const handleToggle = (attributeId) => {
+                    setSelectedAttributes(prev => {
+                        const newSet = new Set(prev);
+                        if (newSet.has(attributeId)) newSet.delete(attributeId);
+                        else newSet.add(attributeId);
+                        return newSet;
+                    });
+                };
+
+                const handleSave = async () => {
+                    setIsLoading(true);
+                    await supabaseClient.from('role_location_attribute').delete().eq('role_id', role.id);
+                    const toInsert = Array.from(selectedAttributes).map(attrId => ({
+                        role_id: role.id,
+                        attribute_id: attrId
+                    }));
+                    if (toInsert.length > 0) {
+                        await supabaseClient.from('role_location_attribute').insert(toInsert);
+                    }
+                    onSave();
+                    onClose();
+                };
+
+                return (
+                    <Modal isOpen={isOpen} onClose={onClose} title={`مدیریت فیلدهای آدرس برای نقش: ${role?.title}`}>
+                        {isLoading ? <p>در حال بارگذاری...</p> : (
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                                {allAttributes.map(attr => (
+                                    <label key={attr.id} className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                                        <input type="checkbox" className="ml-3 h-4 w-4 rounded" checked={selectedAttributes.has(attr.id)} onChange={() => handleToggle(attr.id)} />
+                                        <span>{attr.title}</span>
+                                    </label>
+                                ))}
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
+                            <button onClick={onClose} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white py-2 px-4 rounded-lg">انصراف</button>
+                            <button onClick={handleSave} disabled={isLoading} className="bg-indigo-600 text-white py-2 px-4 rounded-lg disabled:bg-indigo-400">ذخیره</button>
+                        </div>
+                    </Modal>
+                );
+            };
+
+            return (
+                <div>
+                    <h1 className="text-2xl md:text-3xl font-bold mb-6 text-gray-900 dark:text-white">تنظیمات فرم‌ها و کاربران</h1>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <GenericManager
+                            onSave={fetchData}
+                            title="ویژگی‌های آدرس"
+                            tableName="location_attribute_key"
+                            items={appData.locationAttributes}
+                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
+                        />
+                        <GenericManager
+                            onSave={fetchData}
+                            title="نقش‌های کاربری"
+                            tableName="role"
+                            items={appData.roles}
+                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
+                            onManageAttributes={handleManageRoleAttributes}
+                            attributeLabel="مدیریت فیلدهای آدرس"
+                        />
+                    </div>
+                    <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
+                    {isAssignModalOpen && (
+                        <AssignRoleLocationAttributesModal 
+                            isOpen={isAssignModalOpen}
+                            onClose={() => setIsAssignModalOpen(false)}
+                            role={selectedRole}
+                            allAttributes={appData.locationAttributes}
+                            onSave={fetchData}
+                        />
+                    )}
+                </div>
+            );
+        };
+        
+        // ==================================================
+        // Main App Component
+        // ==================================================
+        const App = () => {
+            const [theme, setTheme] = React.useState(localStorage.getItem('theme') || 'dark');
+            const [currentPage, setCurrentPage] = React.useState('users');
+            const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+            const [appData, setAppData] = React.useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [] });
+            const [isLoading, setIsLoading] = React.useState(true);
+
+            // Global data fetcher for forms
+            const fetchAppData = React.useCallback(async () => {
+                setIsLoading(true);
+                const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes] = await Promise.all([
+                    supabaseClient.from('role').select('*').order('title'),
+                    supabaseClient.from('province').select('*').order('title'),
+                    supabaseClient.from('marketingchannel').select('*').order('title'),
+                    supabaseClient.from('shippingcompany').select('*').order('title'),
+                    supabaseClient.from('location_attribute_key').select('*').order('title')
+                ]);
+                
+                setAppData({
+                    roles: rolesRes.data || [],
+                    provinces: provinceRes.data || [],
+                    marketingChannels: channelRes.data || [],
+                    shippingCompanies: shippingRes.data || [],
+                    locationAttributes: locAttrRes.data || []
+                });
+                setIsLoading(false);
+            }, []);
+            
+            React.useEffect(() => {
+                fetchAppData();
+            }, [fetchAppData]);
+
+
+            React.useEffect(() => {
+                const root = window.document.documentElement;
+                const isDark = theme === 'dark';
+                root.classList.remove(isDark ? 'light' : 'dark');
+                root.classList.add(theme);
+                localStorage.setItem('theme', theme);
+            }, [theme]);
+
+            const toggleTheme = () => {
+                setTheme(prevTheme => prevTheme === 'light' ? 'dark' : 'light');
+            };
+
+            const renderPage = () => {
+                if(isLoading) {
+                    return <div className="text-center p-8">در حال بارگذاری اطلاعات کلی...</div>
+                }
+                switch (currentPage) {
+                    case 'users': return <UserManagement appData={appData} fetchData={fetchAppData} />;
+                    case 'settings': return <SettingsManagement appData={appData} fetchData={fetchAppData} />;
+                    default: return <UserManagement appData={appData} fetchData={fetchAppData} />;
+                }
+            };
+            
+            const NavItem = ({ page, children }) => {
+                const isActive = currentPage === page;
+                return ( 
+                    <li onClick={() => {setCurrentPage(page); setIsSidebarOpen(false);}} className={`p-3 rounded-lg cursor-pointer transition-colors duration-200 ${isActive ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+                        {children}
+                    </li> 
+                );
+            };
+
+            const Sidebar = () => (
+                <aside className={`fixed lg:relative inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-4 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 flex flex-col`}>
+                    <div className="text-gray-900 dark:text-white text-2xl font-bold mb-10 text-center"><span>Bazaario Users</span></div>
+                    <nav className="flex-1">
+                        <ul className="space-y-2">
+                            <NavItem page="users">مدیریت کاربران</NavItem>
+                            <NavItem page="settings">تنظیمات فرم‌ها</NavItem>
+                        </ul>
+                    </nav>
+                    <div className="mt-auto">
+                        <button onClick={toggleTheme} className="w-full text-center p-3 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200">
+                           {theme === 'light' ? 'حالت تاریک' : 'حالت روشن'}
+                        </button>
+                    </div>
+                </aside>
+            );
+
+            return (
+                <div className="relative min-h-screen lg:flex bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+                    <div className={`fixed inset-0 bg-black/60 z-40 lg:hidden ${isSidebarOpen ? 'block' : 'hidden'}`} onClick={() => setIsSidebarOpen(false)}></div>
+                    <Sidebar />
+                    <div className="flex-1 flex flex-col">
+                        <header className="lg:hidden sticky top-0 bg-white dark:bg-gray-800 shadow-md z-30">
+                            <div className="p-4 flex justify-between items-center">
+                                <span className="text-xl font-bold text-gray-900 dark:text-white">پنل کاربران</span>
+                                <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 dark:text-gray-200">
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                                </button>
+                            </div>
+                        </header>
+                        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                            {renderPage()}
+                        </main>
+                    </div>
+                </div>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
