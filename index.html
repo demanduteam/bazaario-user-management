@@ -357,7 +357,7 @@
                             />
                         </div>
                    </div>
-                   <div>
+                    <div>
                         <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">آدرس کامل</label>
                         <textarea name="address" value={formData.address || ''} onChange={handleChange} rows="3" placeholder="خیابان، کوچه، و ..." className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"></textarea>
                    </div>
@@ -883,6 +883,7 @@
             const [isModalOpen, setIsModalOpen] = React.useState(false);
             const [editingUser, setEditingUser] = React.useState(null);
             const [confirmState, setConfirmState] = React.useState({ isOpen: false, onConfirm: null, message: '' });
+            const [searchTerm, setSearchTerm] = React.useState(''); // Add search state
             
             const fetchUsers = async () => {
                 setIsLoading(true);
@@ -917,15 +918,38 @@
             
             const closeConfirmModal = () => { setConfirmState({ isOpen: false, onConfirm: null, message: '' }); };
             
+            // Filter users based on search term
+            const filteredUsers = React.useMemo(() => {
+                if (!searchTerm.trim()) return users;
+                
+                const lowerCaseSearch = searchTerm.toLowerCase().trim();
+                return users.filter(user => 
+                    (user.fullname && user.fullname.toLowerCase().includes(lowerCaseSearch)) ||
+                    (user.mobile && user.mobile.includes(lowerCaseSearch))
+                );
+            }, [users, searchTerm]);
+            
             return (
                 <div>
                     <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"><h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">مدیریت کاربران</h1><button onClick={() => handleOpenModal()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500" disabled={isLoading}>افزودن کاربر جدید</button></div>
+                    
+                    {/* Add Search Bar */}
+                    <div className="mb-4">
+                        <input
+                            type="text"
+                            placeholder="جستجو بر اساس نام یا شماره موبایل..."
+                            className="w-full p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+
                     <div className="hidden md:block bg-white dark:bg-gray-800 p-4 rounded-lg shadow overflow-x-auto">
                         <table className="w-full text-right">
                             <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">نام کامل</th><th className="p-3">شماره موبایل</th><th className="p-3">استان</th><th className="p-3">شهر</th><th className="p-3">نقش</th><th className="p-3">وضعیت</th><th className="p-3">عملیات</th></tr></thead>
                             <tbody>
                                 {isLoading ? (<tr><td colSpan="7" className="text-center p-4">در حال بارگذاری...</td></tr>) : (
-                                    users.map(user => {
+                                    filteredUsers.map(user => {
                                         const province = user.userlocation[0]?.location?.city?.province?.title || '-';
                                         const city = user.userlocation[0]?.location?.city?.title || '-';
                                         return (
@@ -945,7 +969,7 @@
                     </div>
                      <div className="md:hidden space-y-4">
                          {isLoading ? (<p className="text-center p-4">در حال بارگذاری...</p>) : (
-                             users.map(user => {
+                             filteredUsers.map(user => {
                                  const province = user.userlocation[0]?.location?.city?.province?.title || '-';
                                  const city = user.userlocation[0]?.location?.city?.title || '-';
                                  return (
@@ -959,7 +983,7 @@
                                      </div>
                                  )
                              })
-                         )}
+                        )}
                     </div>
                     {isModalOpen && <UserForm isOpen={isModalOpen} onClose={handleCloseModal} onSave={refreshAllData} user={editingUser} appData={appData} />}
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={closeConfirmModal} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
