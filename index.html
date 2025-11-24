@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Bazaario - Standalone User Management</title>
     
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -19,13 +20,20 @@
         }
     </script>
     
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- React & ReactDOM (Using cdnjs for better reliability) -->
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.min.js"></script>
     
+    <!-- Babel -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
+    <!-- Supabase -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+    <!-- Jalaali JS -->
     <script src="https://cdn.jsdelivr.net/npm/jalaali-js/dist/jalaali.js"></script>
 
     <style>
@@ -33,46 +41,51 @@
         body {
             font-family: 'Vazirmatn', sans-serif;
         }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        .dark ::-webkit-scrollbar-track { background: #2d3748; }
+        .dark ::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 10px; border: 2px solid #2d3748; }
+        .light ::-webkit-scrollbar-track { background: #e5e7eb; }
+        .light ::-webkit-scrollbar-thumb { background-color: #9ca3af; border-radius: 10px; border: 2px solid #e5e7eb; }
+        
         .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.7);
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 100;
-            transition: opacity 0.3s ease-in-out;
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease-in-out;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            visibility: visible;
         }
         .modal-content {
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            width: 90%;
-            max-width: 800px;
-            max-height: 90vh;
-            overflow-y: auto;
             transform: scale(0.95);
             transition: transform 0.3s ease-in-out;
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .modal-overlay.open .modal-content {
             transform: scale(1);
         }
-        .modal-content::-webkit-scrollbar { width: 8px; }
-        .dark .modal-content::-webkit-scrollbar-track { background: #2d3748; }
-        .dark .modal-content::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 10px; border: 2px solid #2d3748; }
-        .light .modal-content::-webkit-scrollbar-track { background: #e5e7eb; }
-        .light .modal-content::-webkit-scrollbar-thumb { background-color: #9ca3af; border-radius: 10px; border: 2px solid #e5e7eb; }
         
         .spinner {
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #3498db;
+            border: 2px solid rgba(0,0,0,0.1);
+            border-left-color: #4f46e5;
             border-radius: 50%;
-            width: 14px;
-            height: 14px;
+            width: 20px;
+            height: 20px;
             animation: spin 1s linear infinite;
-            display: inline-block;
+        }
+        .dark .spinner {
+            border: 2px solid rgba(255,255,255,0.1);
+            border-left-color: #818cf8;
         }
         @keyframes spin {
             0% { transform: rotate(0deg); }
@@ -80,32 +93,39 @@
         }
     </style>
 </head>
-<body class="bg-gray-100 dark:bg-gray-900">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors duration-200">
     <div id="root"></div>
 
     <script type="text/babel">
+        // Access globals directly from window/library objects
+        const { createClient } = window.supabase;
+        const { useState, useEffect, useMemo, useRef, useCallback } = React;
+
         // ==================================================
         // Supabase Client Setup
         // ==================================================
-        const { createClient } = supabase;
         const supabaseUrl = 'https://wehyjatotbzxargnxasg.supabase.co';
-        // FIXME: The previous API key was invalid. Please replace the placeholder below with your correct Supabase anonymous key.
         const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndlaHlqYXRvdGJ6eGFyZ254YXNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTE5MTIwMjEsImV4cCI6MjA2NzQ4ODAyMX0.2R448DuEBlTrNvaYXiYZ8D5M7MJNv7n1qmIDHQBNFiY';
-        const supabaseClient = createClient(supabaseUrl, supabaseKey, { global: { fetch: window.fetch.bind(window) } });
+        const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
         // ==================================================
-        // Helper UI Components & Functions
+        // Helper UI Components
         // ==================================================
+        
         const Modal = ({ isOpen, onClose, title, children }) => {
             if (!isOpen) return null;
             return (
-                <div className="modal-overlay open" onClick={onClose}>
-                    <div className="modal-content bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center mb-4 pb-3 border-b border-gray-200 dark:border-gray-600">
-                            <h2 className="text-xl font-bold">{title}</h2>
-                            <button onClick={onClose} className="text-gray-400 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
+                <div className={`modal-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}>
+                    <div className="modal-content bg-white dark:bg-gray-800 w-11/12 max-w-3xl rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
+                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20">
+                                <i className="fa-solid fa-times text-lg"></i>
+                            </button>
                         </div>
-                        {children}
+                        <div className="p-5 overflow-y-auto custom-scrollbar">
+                            {children}
+                        </div>
                     </div>
                 </div>
             );
@@ -115,30 +135,43 @@
             if (!isOpen) return null;
             return (
                 <Modal isOpen={isOpen} onClose={onClose} title={title}>
-                    <p className="text-gray-600 dark:text-gray-300 mb-6">{message}</p>
-                    <div className="flex flex-col sm:flex-row justify-end gap-3">
-                        <button type="button" onClick={onClose} className="w-full sm:w-auto bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white font-bold py-2 px-4 rounded-lg">لغو</button>
-                        <button type="button" onClick={onConfirm} className="w-full sm:w-auto bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">تایید</button>
+                    <div className="text-center sm:text-right">
+                        <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4 sm:mx-0 sm:h-10 sm:w-10 sm:inline-flex sm:float-right sm:ml-4">
+                            <i className="fa-solid fa-triangle-exclamation text-red-600 dark:text-red-400"></i>
+                        </div>
+                        <div className="mt-3 sm:mt-0 sm:mr-4 text-right">
+                            <p className="text-sm text-gray-500 dark:text-gray-300">
+                                {message}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="mt-6 flex flex-col-reverse sm:flex-row gap-3 justify-end">
+                        <button type="button" onClick={onClose} className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-700 text-base font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none sm:text-sm">
+                            لغو
+                        </button>
+                        <button type="button" onClick={onConfirm} className="w-full sm:w-auto inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none sm:text-sm">
+                            تایید و ادامه
+                        </button>
                     </div>
                 </Modal>
             );
         };
         
         const SearchableSelect = ({ options, value, onChange, placeholder, disabled = false }) => {
-            const [searchTerm, setSearchTerm] = React.useState('');
-            const [isOpen, setIsOpen] = React.useState(false);
-            const wrapperRef = React.useRef(null);
+            const [searchTerm, setSearchTerm] = useState('');
+            const [isOpen, setIsOpen] = useState(false);
+            const wrapperRef = useRef(null);
 
-            const selectedOption = React.useMemo(() => options.find(opt => opt.id === value), [options, value]);
+            const selectedOption = useMemo(() => options.find(opt => opt.id === value), [options, value]);
 
-            const filteredOptions = React.useMemo(() => {
+            const filteredOptions = useMemo(() => {
                 if (!searchTerm) return options;
                 return options.filter(opt =>
                     opt.title.toLowerCase().includes(searchTerm.toLowerCase())
                 );
             }, [options, searchTerm]);
 
-            React.useEffect(() => {
+            useEffect(() => {
                 function handleClickOutside(event) {
                     if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
                         setIsOpen(false);
@@ -157,29 +190,34 @@
 
             return (
                 <div className="relative" ref={wrapperRef}>
-                    <input
-                        type="text"
-                        placeholder={selectedOption ? selectedOption.title : placeholder}
-                        value={searchTerm}
-                        onChange={e => setSearchTerm(e.target.value)}
-                        onFocus={() => setIsOpen(true)}
-                        disabled={disabled}
-                        className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
-                    />
+                    <div className="relative">
+                        <input
+                            type="text"
+                            placeholder={selectedOption ? selectedOption.title : placeholder}
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            onFocus={() => setIsOpen(true)}
+                            disabled={disabled}
+                            className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        />
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <i className={`fa-solid fa-chevron-down text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}></i>
+                        </div>
+                    </div>
                     {isOpen && !disabled && (
-                        <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        <div className="absolute z-20 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-60 overflow-y-auto">
                             {filteredOptions.length > 0 ? (
                                 filteredOptions.map(option => (
                                     <div
                                         key={option.id}
                                         onClick={() => handleSelect(option)}
-                                        className="p-2 hover:bg-indigo-100 dark:hover:bg-indigo-800 cursor-pointer"
+                                        className="p-2.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 cursor-pointer text-sm transition-colors"
                                     >
                                         {option.title}
                                     </div>
                                 ))
                             ) : (
-                                <div className="p-2 text-gray-500">موردی یافت نشد.</div>
+                                <div className="p-2.5 text-gray-500 text-sm text-center">موردی یافت نشد</div>
                             )}
                         </div>
                     )}
@@ -188,13 +226,13 @@
         };
         
         const GenericManager = ({ onSave, title, tableName, items: initialItems, confirmModal, onManageAttributes, attributeLabel }) => {
-            const [items, setItems] = React.useState(initialItems);
-            const [newItemName, setNewItemName] = React.useState('');
-            const [editingItem, setEditingItem] = React.useState(null);
-            const [isLoading, setIsLoading] = React.useState(false);
-            const [error, setError] = React.useState('');
+            const [items, setItems] = useState(initialItems);
+            const [newItemName, setNewItemName] = useState('');
+            const [editingItem, setEditingItem] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState('');
 
-            React.useEffect(() => {
+            useEffect(() => {
                 setItems(initialItems);
             }, [initialItems]);
 
@@ -210,7 +248,7 @@
                 } else {
                     setItems(prev => [...prev, data]);
                     setNewItemName('');
-                    onSave(); // Notify parent to refetch all data
+                    onSave();
                 }
                 setIsLoading(false);
             };
@@ -244,8 +282,7 @@
                 setError('');
                 const { error } = await supabaseClient.from(tableName).delete().eq('id', itemId);
                 if (error) {
-                    setError(`خطا در حذف. ممکن است این مورد توسط آیتم دیگری استفاده شده باشد.`);
-                    console.error("Delete error:", error);
+                    setError(`خطا در حذف. ممکن است این مورد استفاده شده باشد.`);
                 } else {
                     setItems(prev => prev.filter(item => item.id !== itemId));
                     onSave();
@@ -254,50 +291,68 @@
             };
             
             return (
-                <div className="space-y-4 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-                    <h2 className="text-xl font-bold mb-4">{`لیست ${title}`}</h2>
-                    <form onSubmit={handleAddItem} className="flex gap-2">
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                           <i className={`fa-solid ${tableName === 'role' ? 'fa-user-shield' : 'fa-tags'} text-indigo-500`}></i>
+                           {`لیست ${title}`}
+                        </h2>
+                        <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-gray-500">{items.length} مورد</span>
+                    </div>
+                    
+                    <form onSubmit={handleAddItem} className="flex gap-2 mb-4">
                         <input
                             type="text"
                             value={newItemName}
                             onChange={(e) => setNewItemName(e.target.value)}
                             placeholder={`افزودن ${title} جدید...`}
-                            className="flex-grow bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                            className="flex-grow bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-green-500 focus:border-green-500 block p-2.5"
                         />
-                        <button type="submit" disabled={isLoading} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-green-400">
-                            افزودن
+                        <button type="submit" disabled={isLoading} className="text-white bg-green-600 hover:bg-green-700 focus:ring-4 focus:ring-green-300 font-medium rounded-lg text-sm px-4 py-2 dark:bg-green-600 dark:hover:bg-green-700 dark:focus:ring-green-800 transition-colors">
+                            {isLoading ? <div className="spinner w-4 h-4 border-white"></div> : <i className="fa-solid fa-plus"></i>}
                         </button>
                     </form>
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                    <div className="max-h-96 overflow-y-auto space-y-2 pr-2">
+                    
+                    {error && <div className="p-3 mb-3 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-700 dark:text-red-400" role="alert">{error}</div>}
+                    
+                    <div className="max-h-80 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                         {items.map(item => (
-                            <div key={item.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700/50 rounded-md">
+                            <div key={item.id} className="group flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600">
                                 {editingItem?.id === item.id ? (
-                                    <input
-                                        type="text"
-                                        value={editingItem.title}
-                                        onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
-                                        className="flex-grow bg-white dark:bg-gray-600 p-1 rounded-md"
-                                        autoFocus
-                                        onBlur={handleUpdateItem}
-                                        onKeyDown={e => e.key === 'Enter' && handleUpdateItem()}
-                                    />
+                                    <div className="flex-grow flex gap-2 items-center">
+                                        <input
+                                            type="text"
+                                            value={editingItem.title}
+                                            onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
+                                            className="flex-grow bg-white dark:bg-gray-600 border border-indigo-300 rounded p-1 text-sm"
+                                            autoFocus
+                                            onKeyDown={e => e.key === 'Enter' && handleUpdateItem()}
+                                        />
+                                        <button onClick={handleUpdateItem} className="text-green-600 hover:text-green-800"><i className="fa-solid fa-check"></i></button>
+                                        <button onClick={() => setEditingItem(null)} className="text-red-500 hover:text-red-700"><i className="fa-solid fa-times"></i></button>
+                                    </div>
                                 ) : (
-                                    <span className="text-gray-800 dark:text-gray-200">{item.title}</span>
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{item.title}</span>
                                 )}
-                                <div className="flex-shrink-0 space-x-2 space-x-reverse">
-                                    {onManageAttributes && (
-                                        <button onClick={() => onManageAttributes(item)} className="text-sm text-green-500 hover:underline">{attributeLabel || 'مدیریت'}</button>
-                                    )}
-                                    {editingItem?.id === item.id ? (
-                                        <button onClick={() => setEditingItem(null)} className="text-sm text-gray-500 hover:underline">لغو</button>
-                                    ) : (
-                                        <button onClick={() => setEditingItem(item)} className="text-sm text-indigo-500 hover:underline">ویرایش</button>
-                                    )}
-                                    <button onClick={() => requestDeleteItem(item)} disabled={isLoading} className="text-sm text-red-500 hover:underline">حذف</button>
-                                </div>
+                                
+                                {editingItem?.id !== item.id && (
+                                    <div className="flex items-center gap-3 opacity-60 group-hover:opacity-100 transition-opacity">
+                                        {onManageAttributes && (
+                                            <button onClick={() => onManageAttributes(item)} className="text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1">
+                                                <i className="fa-solid fa-list-check"></i> {attributeLabel}
+                                            </button>
+                                        )}
+                                        <button onClick={() => setEditingItem(item)} className="text-indigo-500 hover:text-indigo-700 dark:text-indigo-400">
+                                            <i className="fa-regular fa-pen-to-square"></i>
+                                        </button>
+                                        <button onClick={() => requestDeleteItem(item)} className="text-red-500 hover:text-red-700">
+                                            <i className="fa-regular fa-trash-can"></i>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
+                        {items.length === 0 && <p className="text-center text-gray-400 text-sm py-4">هیچ موردی یافت نشد.</p>}
                     </div>
                 </div>
             );
@@ -307,8 +362,8 @@
         // Address Form Components
         // ==================================================
         const AddressFormFields = ({ formData, setFormData, provinces, dynamicAttributes, attributeValues, onAttributeChange, shippingCompanies }) => {
-            const [cities, setCities] = React.useState([]);
-            const [isLoadingCities, setIsLoadingCities] = React.useState(false);
+            const [cities, setCities] = useState([]);
+            const [isLoadingCities, setIsLoadingCities] = useState(false);
 
             const handleChange = (e) => {
                 const { name, value } = e.target;
@@ -319,11 +374,10 @@
                 setFormData(prev => ({ ...prev, [name]: value }));
             };
 
-            React.useEffect(() => {
+            useEffect(() => {
                 const fetchCities = async () => {
                     if (formData.provinceid) {
                         setIsLoadingCities(true);
-                        setFormData(prev => ({ ...prev, cityid: '' }));
                         const { data } = await supabaseClient.from('city').select('*').eq('provinceid', formData.provinceid).order('title');
                         setCities(data || []);
                         setIsLoadingCities(false);
@@ -335,19 +389,25 @@
             }, [formData.provinceid]);
 
             return (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-fadeIn">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">استان</label>
+                            <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">استان</label>
                             <SearchableSelect
                                 options={provinces}
                                 value={formData.provinceid}
-                                onChange={(id) => handleSelectChange('provinceid', id)}
+                                onChange={(id) => {
+                                    handleSelectChange('provinceid', id);
+                                    handleSelectChange('cityid', ''); // Reset city when province changes
+                                }}
                                 placeholder="جستجو یا انتخاب استان..."
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شهر</label>
+                            <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white flex justify-between">
+                                <span>شهر</span>
+                                {isLoadingCities && <span className="text-xs text-indigo-500">در حال دریافت...</span>}
+                            </label>
                             <SearchableSelect
                                 options={cities}
                                 value={formData.cityid}
@@ -358,32 +418,44 @@
                         </div>
                    </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">آدرس کامل</label>
-                        <textarea name="address" value={formData.address || ''} onChange={handleChange} rows="3" placeholder="خیابان، کوچه، و ..." className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"></textarea>
+                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">آدرس کامل</label>
+                        <textarea 
+                            name="address" 
+                            value={formData.address || ''} 
+                            onChange={handleChange} 
+                            rows="3" 
+                            placeholder="خیابان، کوچه، و ..." 
+                            className="block p-2.5 w-full text-sm text-gray-900 bg-white dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 focus:ring-indigo-500 focus:border-indigo-500"
+                        ></textarea>
                    </div>
                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره پلاک</label>
-                            <input type="text" name="plaque" value={formData.plaque || ''} onChange={handleChange} placeholder="پلاک" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                            <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شماره پلاک</label>
+                            <input type="text" name="plaque" value={formData.plaque || ''} onChange={handleChange} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">کد پستی</label>
-                            <input type="text" name="postalcode" value={formData.postalcode || ''} onChange={handleChange} placeholder="کد پستی ۱۰ رقمی" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
+                            <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">کد پستی</label>
+                            <input type="text" name="postalcode" value={formData.postalcode || ''} onChange={handleChange} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" dir="ltr" className="text-right bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
                         </div>
                    </div>
                    <div>
-                        <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شرکت حمل و نقل ترجیحی</label>
-                        <select name="preferredshippingcompanyid" value={formData.preferredshippingcompanyid || ''} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
+                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شرکت حمل و نقل ترجیحی</label>
+                        <select name="preferredshippingcompanyid" value={formData.preferredshippingcompanyid || ''} onChange={handleChange} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
                             <option value="">انتخاب شرکت...</option>
                             {shippingCompanies.map(company => <option key={company.id} value={company.id}>{company.title}</option>)}
                         </select>
                     </div>
                    {dynamicAttributes && dynamicAttributes.length > 0 && (
-                        <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4">
-                            <h4 className="text-md font-semibold mb-2">اطلاعات تکمیلی آدرس</h4>
+                        <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mt-4">
+                            <h4 className="text-sm font-bold mb-3 text-gray-700 dark:text-gray-300 flex items-center gap-2">
+                                <i className="fa-solid fa-circle-info text-indigo-500"></i>
+                                اطلاعات تکمیلی آدرس
+                            </h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {dynamicAttributes.map(attr => {
                                     let inputField;
+                                    const commonClasses = "bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5";
+                                    
                                     switch (attr.data_type) {
                                         case 'select':
                                             const options = Array.isArray(attr.options) ? attr.options : [];
@@ -391,7 +463,7 @@
                                                 <select
                                                     value={attributeValues[attr.id] || ''}
                                                     onChange={(e) => onAttributeChange(attr.id, e.target.value)}
-                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                    className={commonClasses}
                                                 >
                                                     <option value="">انتخاب کنید...</option>
                                                     {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
@@ -404,23 +476,23 @@
                                                     type="number"
                                                     value={attributeValues[attr.id] || ''}
                                                     onChange={(e) => onAttributeChange(attr.id, e.target.value)}
-                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                    className={commonClasses}
                                                 />
                                             );
                                             break;
-                                        default: // 'text' and any other case
+                                        default: // 'text'
                                             inputField = (
                                                 <input
                                                     type="text"
                                                     value={attributeValues[attr.id] || ''}
                                                     onChange={(e) => onAttributeChange(attr.id, e.target.value)}
-                                                    className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg"
+                                                    className={commonClasses}
                                                 />
                                             );
                                     }
                                     return (
                                         <div key={attr.id}>
-                                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">{attr.title}</label>
+                                            <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">{attr.title}</label>
                                             {inputField}
                                         </div>
                                     );
@@ -436,13 +508,13 @@
             const initialAddress = {
                 provinceid: '', cityid: '', address: '', postalcode: '', plaque: '', preferredshippingcompanyid: ''
             };
-            const [addressData, setAddressData] = React.useState(initialAddress);
-            const [dynamicAttributes, setDynamicAttributes] = React.useState([]);
-            const [attributeValues, setAttributeValues] = React.useState({});
-            const [isLoading, setIsLoading] = React.useState(false);
-            const [error, setError] = React.useState('');
+            const [addressData, setAddressData] = useState(initialAddress);
+            const [dynamicAttributes, setDynamicAttributes] = useState([]);
+            const [attributeValues, setAttributeValues] = useState({});
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState('');
 
-            React.useEffect(() => {
+            useEffect(() => {
                 if (roleId) {
                     const fetchAttributes = async () => {
                         const { data, error } = await supabaseClient
@@ -459,7 +531,7 @@
                 }
             }, [roleId]);
 
-            React.useEffect(() => {
+            useEffect(() => {
                 if (address) { // Editing
                     setAddressData({
                         provinceid: address.provinceid || '',
@@ -559,8 +631,13 @@
             };
 
             return (
-                <form onSubmit={handleSubmit} className="p-4 border border-gray-300 dark:border-gray-600 rounded-lg space-y-4">
-                    <h4 className="text-md font-semibold">{address ? 'ویرایش آدرس' : 'افزودن آدرس جدید'}</h4>
+                <form onSubmit={handleSubmit} className="bg-gray-50 dark:bg-gray-700/20 p-4 rounded-lg border border-gray-200 dark:border-gray-700 mt-4 animate-fadeIn">
+                    <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200 dark:border-gray-600">
+                        <h4 className="text-md font-bold text-indigo-600 dark:text-indigo-400">
+                            {address ? `ویرایش آدرس (شناسه: ${address.id})` : 'افزودن آدرس جدید'}
+                        </h4>
+                        <button type="button" onClick={onCancel} className="text-gray-500 hover:text-gray-700"><i className="fa-solid fa-times"></i></button>
+                    </div>
                     <AddressFormFields 
                         formData={addressData} 
                         setFormData={setAddressData} 
@@ -570,10 +647,15 @@
                         attributeValues={attributeValues}
                         onAttributeChange={(id, value) => setAttributeValues(prev => ({...prev, [id]: value}))}
                     />
-                    {error && <p className="text-red-500 text-sm">{error}</p>}
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button type="button" onClick={onCancel} className="bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white py-1.5 px-4 rounded-lg">انصراف</button>
-                        <button type="submit" disabled={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 px-4 rounded-lg disabled:bg-indigo-400">ذخیره آدرس</button>
+                    {error && <p className="text-red-500 text-sm mt-2"><i className="fa-solid fa-triangle-exclamation"></i> {error}</p>}
+                    <div className="flex justify-end gap-3 pt-4 mt-2">
+                        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">
+                            انصراف
+                        </button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 dark:focus:ring-indigo-900 flex items-center gap-2">
+                            {isLoading && <div className="spinner w-4 h-4 border-white"></div>}
+                            ذخیره آدرس
+                        </button>
                     </div>
                 </form>
             );
@@ -585,18 +667,18 @@
         const UserForm = ({ isOpen, onClose, onSave, user, appData }) => {
             const { roles, provinces, marketingChannels, shippingCompanies } = appData;
             const initialFormData = {
-                fullname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: ''
+                fullname: '', firstname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: '', prefix: ''
             };
-            const [formData, setFormData] = React.useState(initialFormData);
-            const [isChecking, setIsChecking] = React.useState(false);
-            const [existingUser, setExistingUser] = React.useState(null);
-            const [error, setError] = React.useState('');
-            const customerRoleId = React.useMemo(() => roles.find(r => r.title === 'Customer')?.id, [roles]);
+            const [formData, setFormData] = useState(initialFormData);
+            const [isChecking, setIsChecking] = useState(false);
+            const [existingUser, setExistingUser] = useState(null);
+            const [error, setError] = useState('');
+            const customerRoleId = useMemo(() => roles.find(r => r.title === 'Customer')?.id, [roles]);
             
-            const [showAddressForm, setShowAddressForm] = React.useState(false);
-            const [editingAddress, setEditingAddress] = React.useState(null);
-            const [userLocations, setUserLocations] = React.useState([]);
-            const [newAddresses, setNewAddresses] = React.useState([]);
+            const [showAddressForm, setShowAddressForm] = useState(false);
+            const [editingAddress, setEditingAddress] = useState(null);
+            const [userLocations, setUserLocations] = useState([]);
+            const [newAddresses, setNewAddresses] = useState([]);
 
             const fetchUserLocations = async (userId) => {
                 if (!userId) return;
@@ -608,7 +690,7 @@
                 else setUserLocations(data || []);
             };
 
-            React.useEffect(() => {
+            useEffect(() => {
                 if (isOpen) {
                     setError('');
                     setShowAddressForm(false);
@@ -619,6 +701,8 @@
                         setFormData({
                             ...initialFormData,
                             fullname: user.fullname || '',
+                            firstname: user.firstname || '',
+                            prefix: user.prefix || '',
                             email: user.email?.endsWith('@placeholder.email') ? '' : user.email || '',
                             mobile: user.mobile || '',
                             emergencyphonenumber: user.emergencyphonenumber || '',
@@ -647,6 +731,8 @@
                         setFormData(prev => ({
                             ...prev,
                             fullname: data.fullname || '',
+                            firstname: data.firstname || '',
+                            prefix: data.prefix || '',
                             email: data.email?.endsWith('@placeholder.email') ? '' : data.email || '',
                             emergencyphonenumber: data.emergencyphonenumber || '',
                             roleid: data.role?.id || customerRoleId,
@@ -684,6 +770,8 @@
                 try {
                     const profileData = {
                         fullname: formData.fullname,
+                        firstname: formData.firstname || null,
+                        prefix: formData.prefix || null,
                         email: formData.email || `${formData.mobile}@placeholder.email`,
                         emergencyphonenumber: formData.emergencyphonenumber || null,
                         roleid: formData.roleid,
@@ -769,71 +857,114 @@
             return (
                 <Modal isOpen={isOpen} onClose={onClose} title={user ? 'ویرایش کاربر' : 'افزودن کاربر جدید'}>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">اطلاعات کاربری</h3>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره موبایل</label>
-                            <div className="relative">
-                                <input type="tel" name="mobile" value={formData.mobile} onChange={handleMobileChange} placeholder="برای یافتن یا ایجاد کاربر وارد کنید" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required disabled={!!user} />
-                                {isChecking && <div className="spinner absolute left-3 top-1/2 -translate-y-1/2"></div>}
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Left Column */}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شماره موبایل</label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                            <i className="fa-solid fa-mobile-screen text-gray-400"></i>
+                                        </div>
+                                        <input type="tel" name="mobile" value={formData.mobile} onChange={handleMobileChange} placeholder="09..." className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 p-2.5" required disabled={!!user} />
+                                        {isChecking && <div className="spinner absolute left-10 top-1/2 -translate-y-1/2 w-4 h-4"></div>}
+                                    </div>
+                                </div>
+                                <div className="flex gap-3">
+                                    <div className="w-1/4">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">عنوان</label>
+                                        <select name="prefix" value={formData.prefix} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
+                                            <option value="">انتخاب...</option>
+                                            <option value="Mr">جناب</option>
+                                            <option value="Mrs">بانو</option>
+                                            <option value="Company">شرکت</option>
+                                        </select>
+                                    </div>
+                                    <div className="w-1/3">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نام کوچک</label>
+                                        <input type="text" name="firstname" value={formData.firstname} onChange={handleChange} placeholder="نام کوچک" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
+                                    </div>
+                                    <div className="flex-grow">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نام کامل</label>
+                                        <input type="text" name="fullname" value={formData.fullname} onChange={handleChange} placeholder="نام کامل" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">ایمیل (اختیاری)</label>
+                                    <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="example@mail.com" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
+                                </div>
+                            </div>
+                            
+                            {/* Right Column */}
+                            <div className="space-y-4">
+                                 <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شماره موبایل دوم</label>
+                                    <input type="tel" name="emergencyphonenumber" value={formData.emergencyphonenumber} onChange={handleChange} placeholder="شماره تماس اضطراری" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
+                                </div>
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نقش</label>
+                                    <select name="roleid" value={formData.roleid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required>
+                                        {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">کانال جذب</label>
+                                    <select name="marketingchannelid" value={formData.marketingchannelid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
+                                        <option value="">انتخاب کانال...</option>
+                                        {marketingChannels.map(channel => <option key={channel.id} value={channel.id}>{channel.title}</option>)}
+                                    </select>
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">نام کامل</label>
-                            <input type="text" name="fullname" value={formData.fullname} onChange={handleChange} placeholder="نام کامل" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required />
-                        </div>
-                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">ایمیل (اختیاری)</label>
-                                <input type="email" name="email" value={formData.email} onChange={handleChange} placeholder="در صورت خالی بودن، با موبایل ساخته می‌شود" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">شماره موبایل دوم</label>
-                                <input type="tel" name="emergencyphonenumber" value={formData.emergencyphonenumber} onChange={handleChange} placeholder="شماره تماس اضطراری" className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" />
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">نقش</label>
-                                <select name="roleid" value={formData.roleid} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg" required>
-                                    {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-600 dark:text-gray-300 mb-1">کانال جذب</label>
-                                <select name="marketingchannelid" value={formData.marketingchannelid} onChange={handleChange} className="w-full bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
-                                    <option value="">انتخاب کانال...</option>
-                                    {marketingChannels.map(channel => <option key={channel.id} value={channel.id}>{channel.title}</option>)}
-                                </select>
-                            </div>
-                        </div>
-                         {error && <p className="text-red-500 text-sm mt-4">{error}</p>}
-                         {existingUser && !user && <p className="text-green-500 text-sm">کاربر یافت شد. اطلاعات فرم به‌روزرسانی خواهد شد.</p>}
-                         {!existingUser && formData.mobile.length >= 10 && !isChecking && <p className="text-blue-500 text-sm">کاربر جدید. رمز عبور پیش‌فرض: ۶ رقم آخر موبایل.</p>}
-                        <div className="mt-6 flex flex-col sm:flex-row justify-end gap-3">
-                            <button type="button" onClick={onClose} className="w-full sm:w-auto bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-800 dark:text-white py-2 px-4 rounded-lg">بستن</button>
-                            <button type="submit" disabled={isChecking} className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 text-white py-2 px-4 rounded-lg disabled:bg-indigo-400">
-                                {existingUser ? 'به‌روزرسانی اطلاعات کاربر' : 'ایجاد کاربر'}
+
+                         {error && <div className="p-3 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-red-900/20 dark:text-red-400" role="alert">{error}</div>}
+                         {existingUser && !user && <div className="p-3 text-sm text-green-800 rounded-lg bg-green-50 dark:bg-green-900/20 dark:text-green-400">کاربر یافت شد. اطلاعات فرم به‌روزرسانی خواهد شد.</div>}
+                         {!existingUser && formData.mobile.length >= 10 && !isChecking && <div className="p-3 text-sm text-blue-800 rounded-lg bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400">کاربر جدید. رمز عبور پیش‌فرض: ۶ رقم آخر موبایل.</div>}
+                        
+                        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-4">
+                            <button type="submit" disabled={isChecking} className="w-full sm:w-auto text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:outline-none focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-indigo-600 dark:hover:bg-indigo-700 dark:focus:ring-indigo-800 transition-all">
+                                {existingUser ? 'به‌روزرسانی اطلاعات' : 'ایجاد کاربر'}
                             </button>
                         </div>
                     </form>
 
                     {/* Address Management Section */}
-                    <div className="border-t border-gray-200 dark:border-gray-700 mt-6 pt-4 space-y-4">
-                        <div className="flex justify-between items-center">
-                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200">مدیریت آدرس‌ها</h3>
-                            {!showAddressForm && <button type="button" onClick={() => { setEditingAddress(null); setShowAddressForm(true); }} className="text-sm bg-green-600 hover:bg-green-700 text-white py-1 px-3 rounded-lg">+ افزودن آدرس</button>}
+                    <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                <i className="fa-solid fa-map-location-dot text-indigo-500"></i>
+                                مدیریت آدرس‌ها
+                            </h3>
+                            {!showAddressForm && (
+                                <button type="button" onClick={() => { setEditingAddress(null); setShowAddressForm(true); }} className="text-xs font-medium text-white bg-green-500 hover:bg-green-600 px-3 py-1.5 rounded-lg transition-colors">
+                                    <i className="fa-solid fa-plus ml-1"></i> افزودن آدرس
+                                </button>
+                            )}
                         </div>
                         
                         {existingUser && userLocations.length > 0 && !showAddressForm && (
-                            <div className="space-y-2">
+                            <div className="grid grid-cols-1 gap-3">
                                 {userLocations.map(({ location }) => {
-                                    const fullAddress = `${location.city?.province?.title || ''}, ${location.city?.title || ''}, ${location.address || ''}, پلاک ${location.plaque || ''}, کدپستی ${location.postalcode || ''}`;
+                                    const fullAddress = `${location.city?.province?.title || ''}، ${location.city?.title || ''}، ${location.address || ''}`;
                                     return (
-                                        <div key={location.id} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">{fullAddress}</p>
-                                            <div className="flex-shrink-0 space-x-2 space-x-reverse">
-                                                <button onClick={() => { setEditingAddress(location); setShowAddressForm(true); }} className="text-xs text-indigo-500 hover:underline">ویرایش</button>
-                                                <button onClick={() => handleDeleteAddress(location.id)} className="text-xs text-red-500 hover:underline">حذف</button>
+                                        <div key={location.id} className="p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                                            <div className="flex items-start gap-3">
+                                                <div className="mt-1 text-gray-400"><i className="fa-solid fa-location-dot"></i></div>
+                                                <div>
+                                                    <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{fullAddress}</p>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                        شناسه: {location.id} | پلاک: {location.plaque || '-'} | کدپستی: {location.postalcode || '-'}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 self-end sm:self-center">
+                                                <button onClick={() => { setEditingAddress(location); setShowAddressForm(true); }} className="text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 p-1.5 rounded-md transition-colors">
+                                                    <i className="fa-regular fa-pen-to-square"></i>
+                                                </button>
+                                                <button onClick={() => handleDeleteAddress(location.id)} className="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 p-1.5 rounded-md transition-colors">
+                                                    <i className="fa-regular fa-trash-can"></i>
+                                                </button>
                                             </div>
                                         </div>
                                     )
@@ -842,18 +973,29 @@
                         )}
 
                         {!existingUser && newAddresses.length > 0 && !showAddressForm && (
-                             <div className="space-y-2">
+                             <div className="grid grid-cols-1 gap-3">
                                 {newAddresses.map((addr, index) => {
                                     const provinceName = provinces.find(p => p.id === addr.provinceid)?.title || '';
-                                    const cityName = appData.cities?.find(c => c.id === addr.cityid)?.title || '';
-                                    const fullAddress = `${provinceName}, ${cityName}, ${addr.address || ''}, پلاک ${addr.plaque || ''}, کدپستی ${addr.postalcode || ''}`;
+                                    const cityName = appData.cities?.find(c => c.id === addr.cityid)?.title || ''; // Note: city might not resolve if appData.cities not populated globally, simplified logic
+                                    const fullAddress = `${provinceName}، ${addr.address || ''}`;
                                     return (
-                                        <div key={index} className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-md flex justify-between items-center">
-                                            <p className="text-sm text-gray-600 dark:text-gray-400">{fullAddress}</p>
-                                            <button onClick={() => setNewAddresses(prev => prev.filter((_, i) => i !== index))} className="text-xs text-red-500 hover:underline">حذف</button>
+                                        <div key={index} className="p-3 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 rounded-lg flex justify-between items-center">
+                                            <div className="flex items-center gap-2">
+                                                <span className="bg-indigo-200 text-indigo-800 text-xs px-2 py-0.5 rounded">جدید</span>
+                                                <p className="text-sm text-gray-700 dark:text-gray-300 truncate">{fullAddress}</p>
+                                            </div>
+                                            <button onClick={() => setNewAddresses(prev => prev.filter((_, i) => i !== index))} className="text-red-500 hover:text-red-700 p-1">
+                                                <i className="fa-solid fa-times"></i>
+                                            </button>
                                         </div>
                                     )
                                 })}
+                            </div>
+                        )}
+                        
+                        {!showAddressForm && userLocations.length === 0 && newAddresses.length === 0 && (
+                            <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                                <p className="text-gray-500 dark:text-gray-400 text-sm">هنوز آدرسی ثبت نشده است</p>
                             </div>
                         )}
 
@@ -878,12 +1020,20 @@
         };
 
         const UserManagement = ({ appData, fetchData }) => {
-            const [users, setUsers] = React.useState([]);
-            const [isLoading, setIsLoading] = React.useState(true);
-            const [isModalOpen, setIsModalOpen] = React.useState(false);
-            const [editingUser, setEditingUser] = React.useState(null);
-            const [confirmState, setConfirmState] = React.useState({ isOpen: false, onConfirm: null, message: '' });
-            const [searchTerm, setSearchTerm] = React.useState(''); // Add search state
+            const [users, setUsers] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+            const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
+            const [searchTerm, setSearchTerm] = useState('');
+            const [filterRoleId, setFilterRoleId] = useState(''); // New state for role filter
+            
+            // Map database values to display labels
+            const prefixMap = {
+                'Mr': 'جناب',
+                'Mrs': 'بانو',
+                'Company': 'شرکت'
+            };
             
             const fetchUsers = async () => {
                 setIsLoading(true);
@@ -893,13 +1043,13 @@
                 setIsLoading(false);
             };
 
-            React.useEffect(() => {
+            useEffect(() => {
                 fetchUsers();
             }, []);
 
             const refreshAllData = () => {
                 fetchUsers();
-                if (fetchData) fetchData(); // This refreshes parent appData if provided
+                if (fetchData) fetchData();
             };
             
             const handleOpenModal = (user = null) => { setEditingUser(user); setIsModalOpen(true); };
@@ -918,73 +1068,201 @@
             
             const closeConfirmModal = () => { setConfirmState({ isOpen: false, onConfirm: null, message: '' }); };
             
-            // Filter users based on search term
-            const filteredUsers = React.useMemo(() => {
-                if (!searchTerm.trim()) return users;
-                
+            const filteredUsers = useMemo(() => {
                 const lowerCaseSearch = searchTerm.toLowerCase().trim();
-                return users.filter(user => 
-                    (user.fullname && user.fullname.toLowerCase().includes(lowerCaseSearch)) ||
-                    (user.mobile && user.mobile.includes(lowerCaseSearch))
-                );
-            }, [users, searchTerm]);
+                return users.filter(user => {
+                    const matchesSearch = !lowerCaseSearch || 
+                        (user.fullname && user.fullname.toLowerCase().includes(lowerCaseSearch)) ||
+                        (user.mobile && user.mobile.includes(lowerCaseSearch));
+                    
+                    // Fix: Ensure both IDs are compared as strings to avoid type mismatch (number vs string)
+                    const matchesRole = !filterRoleId || (user.role && String(user.role.id) === String(filterRoleId));
+                    
+                    return matchesSearch && matchesRole;
+                });
+            }, [users, searchTerm, filterRoleId]);
             
             return (
-                <div>
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4"><h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">مدیریت کاربران</h1><button onClick={() => handleOpenModal()} className="w-full md:w-auto bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg disabled:bg-gray-500" disabled={isLoading}>افزودن کاربر جدید</button></div>
+                <div className="animate-fadeIn">
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">مدیریت کاربران</h1>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">لیست تمام کاربران و مدیریت دسترسی‌ها</p>
+                        </div>
+                        <button onClick={() => handleOpenModal()} className="w-full md:w-auto text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 dark:bg-indigo-600 dark:hover:bg-indigo-700 focus:outline-none dark:focus:ring-indigo-800 transition-colors flex items-center justify-center gap-2" disabled={isLoading}>
+                            <i className="fa-solid fa-user-plus"></i> افزودن کاربر جدید
+                        </button>
+                    </div>
                     
-                    {/* Add Search Bar */}
-                    <div className="mb-4">
-                        <input
-                            type="text"
-                            placeholder="جستجو بر اساس نام یا شماره موبایل..."
-                            className="w-full p-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex flex-col md:flex-row gap-4 mb-6">
+                        <div className="relative flex-grow">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                                <i className="fa-solid fa-search text-gray-400"></i>
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="جستجو بر اساس نام یا شماره موبایل..."
+                                className="block w-full p-4 pl-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-indigo-500 dark:focus:border-indigo-500"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="w-full md:w-64">
+                            <select
+                                value={filterRoleId}
+                                onChange={(e) => setFilterRoleId(e.target.value)}
+                                className="block w-full p-4 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-indigo-500 dark:focus:border-indigo-500"
+                            >
+                                <option value="">همه نقش‌ها</option>
+                                {appData.roles.map(role => (
+                                    <option key={role.id} value={role.id}>{role.title}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
-                    <div className="hidden md:block bg-white dark:bg-gray-800 p-4 rounded-lg shadow overflow-x-auto">
-                        <table className="w-full text-right">
-                            <thead><tr className="border-b border-gray-200 dark:border-gray-700"><th className="p-3">نام کامل</th><th className="p-3">شماره موبایل</th><th className="p-3">استان</th><th className="p-3">شهر</th><th className="p-3">نقش</th><th className="p-3">وضعیت</th><th className="p-3">عملیات</th></tr></thead>
-                            <tbody>
-                                {isLoading ? (<tr><td colSpan="7" className="text-center p-4">در حال بارگذاری...</td></tr>) : (
-                                    filteredUsers.map(user => {
-                                        const province = user.userlocation[0]?.location?.city?.province?.title || '-';
-                                        const city = user.userlocation[0]?.location?.city?.title || '-';
-                                        return (
-                                            <tr key={user.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 ${user.isdeleted ? 'opacity-50' : ''}`}>
-                                                <td className="p-3">{user.fullname || '-'}</td>
-                                                <td className="p-3">{user.mobile || '-'}</td>
-                                                <td className="p-3">{province}</td>
-                                                <td className="p-3">{city}</td>
-                                                <td className="p-3"><span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{user.role?.title || 'تعیین نشده'}</span></td>
-                                                <td className="p-3"><span className={`px-2 py-1 text-xs rounded-full ${user.isdeleted ? 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{user.isdeleted ? 'غیرفعال' : 'فعال'}</span></td>
-                                                <td className="p-3 flex items-center space-x-2 space-x-reverse"><button onClick={() => handleOpenModal(user)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-500">ویرایش</button><button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-500">{user.isdeleted ? 'فعال‌سازی' : 'غیرفعال‌سازی'}</button></td>
-                                            </tr>
-                                        )
-                                    }))}
-                            </tbody>
-                        </table>
+                    {/* Desktop Table View */}
+                    <div className="hidden md:block bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right text-gray-500 dark:text-gray-400">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                                    <tr>
+                                        <th className="px-6 py-3">نام کامل</th>
+                                        <th className="px-6 py-3">نام کوچک</th>
+                                        <th className="px-6 py-3">عنوان</th>
+                                        <th className="px-6 py-3">شماره موبایل</th>
+                                        <th className="px-6 py-3 hidden sm:table-cell">موقعیت</th>
+                                        <th className="px-6 py-3">نقش</th>
+                                        <th className="px-6 py-3">وضعیت</th>
+                                        <th className="px-6 py-3">عملیات</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {isLoading ? (
+                                        <tr><td colSpan="8" className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></td></tr>
+                                    ) : filteredUsers.length === 0 ? (
+                                        <tr><td colSpan="8" className="text-center py-8 text-gray-500">هیچ کاربری یافت نشد.</td></tr>
+                                    ) : (
+                                        filteredUsers.map(user => {
+                                            const province = user.userlocation[0]?.location?.city?.province?.title;
+                                            const city = user.userlocation[0]?.location?.city?.title;
+                                            const locationText = province && city ? `${province}، ${city}` : '-';
+                                            const firstName = user.firstname || '-';
+
+                                            return (
+                                                <tr key={user.id} className={`bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 ${user.isdeleted ? 'opacity-60' : ''}`}>
+                                                    <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs">
+                                                            {user.fullname ? user.fullname.charAt(0) : '?'}
+                                                        </div>
+                                                        {user.fullname || '-'}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-gray-700 dark:text-gray-300 font-medium">
+                                                            {firstName}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="text-gray-700 dark:text-gray-300">
+                                                            {prefixMap[user.prefix] || '-'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 font-mono">{user.mobile || '-'}</td>
+                                                    <td className="px-6 py-4 hidden sm:table-cell">{locationText}</td>
+                                                    <td className="px-6 py-4">
+                                                        <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300">
+                                                            {user.role?.title || 'Customer'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center">
+                                                            <div className={`h-2.5 w-2.5 rounded-full ml-2 ${user.isdeleted ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                                            {user.isdeleted ? 'غیرفعال' : 'فعال'}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex gap-3">
+                                                            <button onClick={() => handleOpenModal(user)} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline">ویرایش</button>
+                                                            <button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className={`font-medium hover:underline ${user.isdeleted ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
+                                                                {user.isdeleted ? 'فعال‌سازی' : 'غیرفعال'}
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                     <div className="md:hidden space-y-4">
-                         {isLoading ? (<p className="text-center p-4">در حال بارگذاری...</p>) : (
-                             filteredUsers.map(user => {
-                                 const province = user.userlocation[0]?.location?.city?.province?.title || '-';
-                                 const city = user.userlocation[0]?.location?.city?.title || '-';
-                                 return (
-                                     <div key={user.id} className={`bg-white dark:bg-gray-800 p-4 rounded-lg shadow ${user.isdeleted ? 'opacity-60' : ''}`}>
-                                         <div className="flex justify-between items-center"><h3 className="font-bold text-lg text-gray-900 dark:text-white">{user.fullname || '-'}</h3><span className={`px-2 py-1 text-xs rounded-full ${user.isdeleted ? 'bg-red-200 text-red-800 dark:bg-red-900 dark:text-red-200' : 'bg-green-200 text-green-800 dark:bg-green-900 dark:text-green-200'}`}>{user.isdeleted ? 'غیرفعال' : 'فعال'}</span></div>
-                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{user.mobile || '-'}</p>
-                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">استان: {province}</p>
-                                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">شهر: {city}</p>
-                                         <div className="mt-2 text-sm"><span className="px-2 py-1 text-xs rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200">{user.role?.title || 'تعیین نشده'}</span></div>
-                                         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-4 space-x-reverse"><button onClick={() => handleOpenModal(user)} className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-500 font-semibold">ویرایش</button><button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-500 font-semibold">{user.isdeleted ? 'فعال‌سازی' : 'غیرفعال‌سازی'}</button></div>
-                                     </div>
-                                 )
-                             })
+
+                    {/* Mobile Card View */}
+                    <div className="md:hidden space-y-4">
+                        {isLoading ? (
+                            <div className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></div>
+                        ) : filteredUsers.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">هیچ کاربری یافت نشد.</div>
+                        ) : (
+                            filteredUsers.map(user => {
+                                const province = user.userlocation[0]?.location?.city?.province?.title;
+                                const city = user.userlocation[0]?.location?.city?.title;
+                                const locationText = province && city ? `${province}، ${city}` : '-';
+                                const firstName = user.firstname || '-';
+                                const prefixLabel = prefixMap[user.prefix] || '-';
+
+                                return (
+                                    <div key={user.id} className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm border border-gray-200 dark:border-gray-700 ${user.isdeleted ? 'opacity-75 grayscale' : ''}`}>
+                                        <div className="flex justify-between items-start mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-lg">
+                                                    {user.fullname ? user.fullname.charAt(0) : '?'}
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-bold text-gray-900 dark:text-white text-lg">{user.fullname || '-'}</h3>
+                                                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                        {prefixLabel !== '-' && <span className="bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded text-gray-600 dark:text-gray-300">{prefixLabel}</span>}
+                                                        <span>{firstName}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className={`px-2 py-1 rounded-full text-xs font-medium ${user.isdeleted ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'}`}>
+                                                {user.isdeleted ? 'غیرفعال' : 'فعال'}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="space-y-2 mb-4">
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-mobile-screen w-5 text-center text-gray-400"></i>
+                                                <span className="font-mono">{user.mobile || '-'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-location-dot w-5 text-center text-gray-400"></i>
+                                                <span>{locationText}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-user-tag w-5 text-center text-gray-400"></i>
+                                                <span className="bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 rounded text-xs">
+                                                    {user.role?.title || 'Customer'}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                            <button onClick={() => handleOpenModal(user)} className="flex-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                                <i className="fa-regular fa-pen-to-square"></i> ویرایش
+                                            </button>
+                                            <button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2 ${user.isdeleted ? 'bg-green-50 hover:bg-green-100 dark:bg-green-900/30 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300' : 'bg-red-50 hover:bg-red-100 dark:bg-red-900/30 dark:hover:bg-red-900/50 text-red-700 dark:text-red-300'}`}>
+                                                <i className={`fa-solid ${user.isdeleted ? 'fa-check' : 'fa-ban'}`}></i> 
+                                                {user.isdeleted ? 'فعال‌سازی' : 'غیرفعال'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })
                         )}
                     </div>
+
                     {isModalOpen && <UserForm isOpen={isModalOpen} onClose={handleCloseModal} onSave={refreshAllData} user={editingUser} appData={appData} />}
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={closeConfirmModal} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
                 </div>
@@ -995,9 +1273,9 @@
         // Settings / Attributes Management Component
         // ==================================================
         const SettingsManagement = ({ appData, fetchData }) => {
-            const [confirmState, setConfirmState] = React.useState({ isOpen: false, onConfirm: null, message: '' });
-            const [isAssignModalOpen, setIsAssignModalOpen] = React.useState(false);
-            const [selectedRole, setSelectedRole] = React.useState(null);
+            const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
+            const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+            const [selectedRole, setSelectedRole] = useState(null);
 
             const handleManageRoleAttributes = (role) => {
                 setSelectedRole(role);
@@ -1005,10 +1283,10 @@
             };
 
             const AssignRoleLocationAttributesModal = ({ isOpen, onClose, role, allAttributes, onSave }) => {
-                const [selectedAttributes, setSelectedAttributes] = React.useState(new Set());
-                const [isLoading, setIsLoading] = React.useState(true);
+                const [selectedAttributes, setSelectedAttributes] = useState(new Set());
+                const [isLoading, setIsLoading] = useState(true);
 
-                React.useEffect(() => {
+                useEffect(() => {
                     if (isOpen && role) {
                         setIsLoading(true);
                         supabaseClient
@@ -1051,27 +1329,36 @@
 
                 return (
                     <Modal isOpen={isOpen} onClose={onClose} title={`مدیریت فیلدهای آدرس برای نقش: ${role?.title}`}>
-                        {isLoading ? <p>در حال بارگذاری...</p> : (
-                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {isLoading ? <div className="text-center py-4"><div className="spinner mx-auto border-indigo-500"></div></div> : (
+                            <div className="space-y-2 max-h-96 overflow-y-auto p-2">
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">ویژگی‌هایی که این نقش هنگام ثبت آدرس باید مشاهده کند را انتخاب کنید:</p>
                                 {allAttributes.map(attr => (
-                                    <label key={attr.id} className="flex items-center p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
-                                        <input type="checkbox" className="ml-3 h-4 w-4 rounded" checked={selectedAttributes.has(attr.id)} onChange={() => handleToggle(attr.id)} />
-                                        <span>{attr.title}</span>
+                                    <label key={attr.id} className="flex items-center p-3 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors">
+                                        <input 
+                                            type="checkbox" 
+                                            className="ml-3 w-4 h-4 text-indigo-600 bg-gray-100 border-gray-300 rounded focus:ring-indigo-500 dark:focus:ring-indigo-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600" 
+                                            checked={selectedAttributes.has(attr.id)} 
+                                            onChange={() => handleToggle(attr.id)} 
+                                        />
+                                        <span className="text-sm font-medium text-gray-900 dark:text-gray-300">{attr.title}</span>
+                                        <span className="mr-auto text-xs text-gray-400 bg-gray-100 dark:bg-gray-600 px-2 py-1 rounded">{attr.data_type}</span>
                                     </label>
                                 ))}
                             </div>
                         )}
                         <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-gray-200 dark:border-gray-600">
-                            <button onClick={onClose} className="bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-white py-2 px-4 rounded-lg">انصراف</button>
-                            <button onClick={handleSave} disabled={isLoading} className="bg-indigo-600 text-white py-2 px-4 rounded-lg disabled:bg-indigo-400">ذخیره</button>
+                            <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:border-gray-600 dark:hover:bg-gray-600">انصراف</button>
+                            <button onClick={handleSave} disabled={isLoading} className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 dark:focus:ring-indigo-900">ذخیره تغییرات</button>
                         </div>
                     </Modal>
                 );
             };
 
             return (
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold mb-6 text-gray-900 dark:text-white">تنظیمات فرم‌ها و کاربران</h1>
+                <div className="animate-fadeIn">
+                    <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">تنظیمات سیستم</h1>
+                    <p className="text-gray-500 dark:text-gray-400 mb-6">مدیریت تعاریف پایه و دسترسی‌های فرم‌ها</p>
+                    
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <GenericManager
                             onSave={fetchData}
@@ -1087,7 +1374,7 @@
                             items={appData.roles}
                             confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
                             onManageAttributes={handleManageRoleAttributes}
-                            attributeLabel="مدیریت فیلدهای آدرس"
+                            attributeLabel="فیلدهای آدرس"
                         />
                     </div>
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
@@ -1108,39 +1395,41 @@
         // Main App Component
         // ==================================================
         const App = () => {
-            const [theme, setTheme] = React.useState(localStorage.getItem('theme') || 'dark');
-            const [currentPage, setCurrentPage] = React.useState('users');
-            const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-            const [appData, setAppData] = React.useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [] });
-            const [isLoading, setIsLoading] = React.useState(true);
+            const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light'); // Default to light for better visibility first
+            const [currentPage, setCurrentPage] = useState('users');
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+            const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [] });
+            const [isLoading, setIsLoading] = useState(true);
 
-            // Global data fetcher for forms
-            const fetchAppData = React.useCallback(async () => {
+            const fetchAppData = useCallback(async () => {
                 setIsLoading(true);
-                const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes] = await Promise.all([
-                    supabaseClient.from('role').select('*').order('title'),
-                    supabaseClient.from('province').select('*').order('title'),
-                    supabaseClient.from('marketingchannel').select('*').order('title'),
-                    supabaseClient.from('shippingcompany').select('*').order('title'),
-                    supabaseClient.from('location_attribute_key').select('*').order('title')
-                ]);
-                
-                setAppData({
-                    roles: rolesRes.data || [],
-                    provinces: provinceRes.data || [],
-                    marketingChannels: channelRes.data || [],
-                    shippingCompanies: shippingRes.data || [],
-                    locationAttributes: locAttrRes.data || []
-                });
+                try {
+                    const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes] = await Promise.all([
+                        supabaseClient.from('role').select('*').order('title'),
+                        supabaseClient.from('province').select('*').order('title'),
+                        supabaseClient.from('marketingchannel').select('*').order('title'),
+                        supabaseClient.from('shippingcompany').select('*').order('title'),
+                        supabaseClient.from('location_attribute_key').select('*').order('title')
+                    ]);
+                    
+                    setAppData({
+                        roles: rolesRes.data || [],
+                        provinces: provinceRes.data || [],
+                        marketingChannels: channelRes.data || [],
+                        shippingCompanies: shippingRes.data || [],
+                        locationAttributes: locAttrRes.data || []
+                    });
+                } catch (error) {
+                    console.error("Initial data fetch error:", error);
+                }
                 setIsLoading(false);
             }, []);
             
-            React.useEffect(() => {
+            useEffect(() => {
                 fetchAppData();
             }, [fetchAppData]);
 
-
-            React.useEffect(() => {
+            useEffect(() => {
                 const root = window.document.documentElement;
                 const isDark = theme === 'dark';
                 root.classList.remove(isDark ? 'light' : 'dark');
@@ -1154,7 +1443,7 @@
 
             const renderPage = () => {
                 if(isLoading) {
-                    return <div className="text-center p-8">در حال بارگذاری اطلاعات کلی...</div>
+                    return <div className="flex items-center justify-center h-full"><div className="spinner w-10 h-10 border-indigo-500"></div></div>
                 }
                 switch (currentPage) {
                     case 'users': return <UserManagement appData={appData} fetchData={fetchAppData} />;
@@ -1163,46 +1452,50 @@
                 }
             };
             
-            const NavItem = ({ page, children }) => {
+            const NavItem = ({ page, icon, children }) => {
                 const isActive = currentPage === page;
                 return ( 
-                    <li onClick={() => {setCurrentPage(page); setIsSidebarOpen(false);}} className={`p-3 rounded-lg cursor-pointer transition-colors duration-200 ${isActive ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
-                        {children}
+                    <li onClick={() => {setCurrentPage(page); setIsSidebarOpen(false);}} className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-200 ${isActive ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-600 dark:text-gray-300 hover:bg-indigo-50 dark:hover:bg-gray-700'}`}>
+                        <i className={`fa-solid ${icon} w-5 text-center`}></i>
+                        <span className="font-medium">{children}</span>
                     </li> 
                 );
             };
 
             const Sidebar = () => (
-                <aside className={`fixed lg:relative inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 text-gray-900 dark:text-white p-4 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 flex flex-col`}>
-                    <div className="text-gray-900 dark:text-white text-2xl font-bold mb-10 text-center"><span>Bazaario Users</span></div>
-                    <nav className="flex-1">
+                <aside className={`fixed lg:relative inset-y-0 right-0 z-50 w-64 bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 transform transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : 'translate-x-full'} lg:translate-x-0 flex flex-col shadow-xl lg:shadow-none`}>
+                    <div className="h-16 flex items-center justify-center border-b border-gray-200 dark:border-gray-700">
+                        <span className="text-xl font-black text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                            <i className="fa-solid fa-layer-group"></i>
+                            Bazaario
+                        </span>
+                    </div>
+                    <nav className="flex-1 p-4">
                         <ul className="space-y-2">
-                            <NavItem page="users">مدیریت کاربران</NavItem>
-                            <NavItem page="settings">تنظیمات فرم‌ها</NavItem>
+                            <NavItem page="users" icon="fa-users">مدیریت کاربران</NavItem>
+                            <NavItem page="settings" icon="fa-sliders">تنظیمات فرم‌ها</NavItem>
                         </ul>
                     </nav>
-                    <div className="mt-auto">
-                        <button onClick={toggleTheme} className="w-full text-center p-3 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200">
-                           {theme === 'light' ? 'حالت تاریک' : 'حالت روشن'}
+                    <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+                        <button onClick={toggleTheme} className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                           {theme === 'light' ? <><i className="fa-solid fa-moon"></i> حالت تاریک</> : <><i className="fa-solid fa-sun"></i> حالت روشن</>}
                         </button>
                     </div>
                 </aside>
             );
 
             return (
-                <div className="relative min-h-screen lg:flex bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-                    <div className={`fixed inset-0 bg-black/60 z-40 lg:hidden ${isSidebarOpen ? 'block' : 'hidden'}`} onClick={() => setIsSidebarOpen(false)}></div>
+                <div className="relative min-h-screen lg:flex bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 overflow-hidden">
+                    {isSidebarOpen && <div className="fixed inset-0 bg-black/50 z-40 lg:hidden backdrop-blur-sm" onClick={() => setIsSidebarOpen(false)}></div>}
                     <Sidebar />
-                    <div className="flex-1 flex flex-col">
-                        <header className="lg:hidden sticky top-0 bg-white dark:bg-gray-800 shadow-md z-30">
-                            <div className="p-4 flex justify-between items-center">
-                                <span className="text-xl font-bold text-gray-900 dark:text-white">پنل کاربران</span>
-                                <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 dark:text-gray-200">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
-                                </button>
-                            </div>
+                    <div className="flex-1 flex flex-col h-screen">
+                        <header className="lg:hidden flex items-center justify-between h-16 px-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-30">
+                            <span className="text-lg font-bold text-gray-900 dark:text-white">پنل مدیریت</span>
+                            <button onClick={() => setIsSidebarOpen(true)} className="text-gray-600 dark:text-gray-200 p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                                <i className="fa-solid fa-bars text-xl"></i>
+                            </button>
                         </header>
-                        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
+                        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto custom-scrollbar">
                             {renderPage()}
                         </main>
                     </div>
@@ -1211,9 +1504,9 @@
         };
 
         const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
+        // Ensure ReactDOM is available
+        const root = (window.ReactDOM || ReactDOM).createRoot(container);
         root.render(<App />);
     </script>
 </body>
 </html>
-
