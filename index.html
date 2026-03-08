@@ -36,6 +36,13 @@
     <!-- Jalaali JS -->
     <script src="https://cdn.jsdelivr.net/npm/jalaali-js/dist/jalaali.js"></script>
 
+    <!-- React Multi Date Picker & Dependencies (FIXED LINKS) -->
+    <script src="https://cdn.jsdelivr.net/npm/date-object@3.3.4/build/date-object.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-element-popper@2.1.6/build/browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-multi-date-picker@3.3.4/build/react-multi-date-picker.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-multi-date-picker@3.3.4/build/calendar/persian.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-multi-date-picker@3.3.4/build/locale/persian_fa.min.js"></script>
+
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
         body {
@@ -100,6 +107,11 @@
         // Access globals directly from window/library objects
         const { createClient } = window.supabase;
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
+        
+        // Safely extract DatePicker variables from Window object
+        const DatePickerComponent = window.DatePicker || window.ReactMultiDatePicker;
+        const persianCalendar = window.persian;
+        const persianLocale = window.persian_fa;
 
         // ==================================================
         // Supabase Client Setup
@@ -109,9 +121,21 @@
         const supabaseClient = createClient(supabaseUrl, supabaseKey);
 
         // ==================================================
-        // Helper UI Components
+        // Helper UI Components & Utils
         // ==================================================
         
+        const formatJalaali = (dateString) => {
+            if (!dateString) return '-';
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return dateString;
+                const jDate = jalaali.toJalaali(date.getFullYear(), date.getMonth() + 1, date.getDate());
+                return `${jDate.jy}/${String(jDate.jm).padStart(2, '0')}/${String(jDate.jd).padStart(2, '0')}`;
+            } catch (e) {
+                return dateString.split('T')[0];
+            }
+        };
+
         const Modal = ({ isOpen, onClose, title, children }) => {
             if (!isOpen) return null;
             return (
@@ -294,7 +318,7 @@
                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                           <i className={`fa-solid ${tableName === 'role' ? 'fa-user-shield' : 'fa-tags'} text-indigo-500`}></i>
+                           <i className={`fa-solid ${tableName === 'role' ? 'fa-user-shield' : tableName === 'subscription_plan' ? 'fa-crown' : 'fa-tags'} text-indigo-500`}></i>
                            {`لیست ${title}`}
                         </h2>
                         <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-gray-500">{items.length} مورد</span>
@@ -435,7 +459,7 @@
                         </div>
                         <div>
                             <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">کد پستی</label>
-                            <input type="text" name="postalcode" value={formData.postalcode || ''} onChange={handleChange} className="bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" dir="ltr" className="text-right bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
+                            <input type="text" name="postalcode" value={formData.postalcode || ''} onChange={handleChange} dir="ltr" className="text-right bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
                         </div>
                    </div>
                    <div>
@@ -665,9 +689,9 @@
         // User Form & Management Components
         // ==================================================
         const UserForm = ({ isOpen, onClose, onSave, user, appData }) => {
-            const { roles, provinces, marketingChannels, shippingCompanies } = appData;
+            const { roles, provinces, marketingChannels, shippingCompanies, subscriptionPlans } = appData;
             const initialFormData = {
-                fullname: '', firstname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: '', prefix: ''
+                fullname: '', firstname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: '', prefix: '', subscription_plan_id: '', subscription_start_date: ''
             };
             const [formData, setFormData] = useState(initialFormData);
             const [isChecking, setIsChecking] = useState(false);
@@ -679,6 +703,7 @@
             const [editingAddress, setEditingAddress] = useState(null);
             const [userLocations, setUserLocations] = useState([]);
             const [newAddresses, setNewAddresses] = useState([]);
+            const [subscriptionHistory, setSubscriptionHistory] = useState([]);
 
             const fetchUserLocations = async (userId) => {
                 if (!userId) return;
@@ -690,12 +715,24 @@
                 else setUserLocations(data || []);
             };
 
+            const fetchSubscriptionHistory = async (userId) => {
+                if (!userId) return;
+                const { data, error } = await supabaseClient
+                    .from('user_subscription_history')
+                    .select('*, subscription_plan:subscription_plan_id(title)')
+                    .eq('user_id', userId)
+                    .order('created_at', { ascending: false });
+                if (error) console.error("Error fetching subscription history:", error);
+                else setSubscriptionHistory(data || []);
+            };
+
             useEffect(() => {
                 if (isOpen) {
                     setError('');
                     setShowAddressForm(false);
                     setEditingAddress(null);
                     setNewAddresses([]);
+                    setSubscriptionHistory([]);
 
                     if (user) {
                         setFormData({
@@ -708,13 +745,17 @@
                             emergencyphonenumber: user.emergencyphonenumber || '',
                             roleid: user.role?.id || '',
                             marketingchannelid: user.marketingchannelid || '',
+                            subscription_plan_id: user.subscription_plan?.id || '',
+                            subscription_start_date: user.subscription_start_date ? user.subscription_start_date.split('T')[0] : '',
                         });
                         setExistingUser(user);
                         fetchUserLocations(user.id);
+                        fetchSubscriptionHistory(user.id);
                     } else {
                         setFormData({ ...initialFormData, roleid: customerRoleId || '' });
                         setExistingUser(null);
                         setUserLocations([]);
+                        setSubscriptionHistory([]);
                     }
                 }
             }, [user, isOpen, customerRoleId]);
@@ -726,7 +767,7 @@
 
                 if (mobile && mobile.length >= 10) { 
                     setIsChecking(true);
-                    const { data } = await supabaseClient.from('profiles').select('*, role(id, title)').eq('mobile', mobile).single();
+                    const { data } = await supabaseClient.from('profiles').select('*, role(id, title), subscription_plan:subscription_plan_id(id, title)').eq('mobile', mobile).single();
                     if (data) {
                         setFormData(prev => ({
                             ...prev,
@@ -737,14 +778,18 @@
                             emergencyphonenumber: data.emergencyphonenumber || '',
                             roleid: data.role?.id || customerRoleId,
                             marketingchannelid: data.marketingchannelid || '',
+                            subscription_plan_id: data.subscription_plan?.id || '',
+                            subscription_start_date: data.subscription_start_date ? data.subscription_start_date.split('T')[0] : '',
                         }));
                         setExistingUser(data);
                         fetchUserLocations(data.id);
+                        fetchSubscriptionHistory(data.id);
                         setShowAddressForm(false);
                     } else {
                         setFormData(prev => ({ ...initialFormData, mobile: prev.mobile, roleid: customerRoleId || '' }));
                         setExistingUser(null);
                         setUserLocations([]);
+                        setSubscriptionHistory([]);
                         setShowAddressForm(false);
                     }
                     setIsChecking(false);
@@ -776,6 +821,8 @@
                         emergencyphonenumber: formData.emergencyphonenumber || null,
                         roleid: formData.roleid,
                         marketingchannelid: formData.marketingchannelid || null,
+                        subscription_plan_id: formData.subscription_plan_id || null,
+                        subscription_start_date: (formData.subscription_plan_id && formData.subscription_start_date) ? formData.subscription_start_date : null,
                     };
 
                     if (existingUser) { // UPDATE USER
@@ -784,6 +831,20 @@
                             .update(profileData)
                             .eq('id', existingUser.id);
                         if (profileError) throw profileError;
+
+                        // Check if subscription changed to insert history log
+                        const existingSubId = existingUser.subscription_plan?.id || '';
+                        const existingStartDate = existingUser.subscription_start_date ? existingUser.subscription_start_date.split('T')[0] : '';
+                        
+                        if ((formData.subscription_plan_id !== existingSubId || formData.subscription_start_date !== existingStartDate) && formData.subscription_plan_id) {
+                            const historyData = {
+                                user_id: existingUser.id,
+                                subscription_plan_id: formData.subscription_plan_id,
+                                start_date: formData.subscription_start_date || new Date().toISOString().split('T')[0]
+                            };
+                            await supabaseClient.from('user_subscription_history').insert(historyData);
+                        }
+
                         onSave();
                         onClose();
 
@@ -801,6 +862,16 @@
                                 .eq('id', authData.user.id);
                             if (profileError) throw profileError;
                             
+                            // Insert initial subscription history log
+                            if (formData.subscription_plan_id) {
+                                const historyData = {
+                                    user_id: authData.user.id,
+                                    subscription_plan_id: formData.subscription_plan_id,
+                                    start_date: formData.subscription_start_date || new Date().toISOString().split('T')[0]
+                                };
+                                await supabaseClient.from('user_subscription_history').insert(historyData);
+                            }
+
                             for (const addr of newAddresses) {
                                 const locationFields = {
                                     title: `آدرس ${formData.fullname}`,
@@ -898,6 +969,49 @@
                             
                             {/* Right Column */}
                             <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">طرح اشتراک ویژه</label>
+                                        <select name="subscription_plan_id" value={formData.subscription_plan_id} onChange={handleChange} className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-yellow-500 focus:border-yellow-500 block w-full p-2.5">
+                                            <option value="">بدون اشتراک</option>
+                                            {subscriptionPlans?.map(plan => <option key={plan.id} value={plan.id}>{plan.title}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">تاریخ شروع</label>
+                                        {DatePickerComponent ? (
+                                            <DatePickerComponent
+                                                calendar={persianCalendar}
+                                                locale={persianLocale}
+                                                value={formData.subscription_start_date ? new Date(formData.subscription_start_date) : ""}
+                                                onChange={(date) => {
+                                                    if (!date) {
+                                                        handleChange({ target: { name: 'subscription_start_date', value: '' } });
+                                                        return;
+                                                    }
+                                                    const { gy, gm, gd } = jalaali.toGregorian(date.year, date.month.number, date.day);
+                                                    const val = `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}`;
+                                                    handleChange({ target: { name: 'subscription_start_date', value: val } });
+                                                }}
+                                                inputClass="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                containerStyle={{ width: '100%' }}
+                                                disabled={!formData.subscription_plan_id}
+                                                format="YYYY/MM/DD"
+                                                placeholder="انتخاب تاریخ..."
+                                            />
+                                        ) : (
+                                            <input 
+                                                type="date" 
+                                                name="subscription_start_date" 
+                                                value={formData.subscription_start_date} 
+                                                onChange={handleChange} 
+                                                disabled={!formData.subscription_plan_id} 
+                                                className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 disabled:opacity-50 disabled:cursor-not-allowed" 
+                                                dir="ltr" 
+                                            />
+                                        )}
+                                    </div>
+                                </div>
                                  <div>
                                     <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شماره موبایل دوم</label>
                                     <input type="tel" name="emergencyphonenumber" value={formData.emergencyphonenumber} onChange={handleChange} placeholder="شماره تماس اضطراری" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
@@ -906,13 +1020,6 @@
                                     <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نقش</label>
                                     <select name="roleid" value={formData.roleid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required>
                                         {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">کانال جذب</label>
-                                    <select name="marketingchannelid" value={formData.marketingchannelid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
-                                        <option value="">انتخاب کانال...</option>
-                                        {marketingChannels.map(channel => <option key={channel.id} value={channel.id}>{channel.title}</option>)}
                                     </select>
                                 </div>
                             </div>
@@ -1015,6 +1122,47 @@
                             />
                         )}
                     </div>
+
+                    {/* Subscription History Section */}
+                    {existingUser && (
+                        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex items-center mb-4 gap-2">
+                                <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+                                    <i className="fa-solid fa-clock-rotate-left text-yellow-500"></i>
+                                    تاریخچه اشتراک‌ها
+                                </h3>
+                                <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-gray-500">{subscriptionHistory.length} مورد</span>
+                            </div>
+                            
+                            {subscriptionHistory.length > 0 ? (
+                                <div className="space-y-3">
+                                    {subscriptionHistory.map((history) => (
+                                        <div key={history.id} className="p-3 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg flex justify-between items-center">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-yellow-50 dark:bg-yellow-900/30 flex items-center justify-center text-yellow-600 dark:text-yellow-400">
+                                                    <i className="fa-solid fa-crown"></i>
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-bold text-gray-800 dark:text-gray-200">{history.subscription_plan?.title || 'طرح نامشخص'}</p>
+                                                    <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                        <span><i className="fa-regular fa-calendar ml-1"></i>شروع: {formatJalaali(history.start_date)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="text-left">
+                                                <p className="text-xs text-gray-400 dark:text-gray-500" dir="ltr">{new Date(history.created_at).toLocaleDateString('fa-IR')}</p>
+                                                <p className="text-[10px] text-gray-400 dark:text-gray-500">زمان ثبت</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-6 bg-gray-50 dark:bg-gray-700/30 rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                                    <p className="text-gray-500 dark:text-gray-400 text-sm">تاریخچه‌ای برای اشتراک یافت نشد</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </Modal>
             );
         };
@@ -1037,7 +1185,7 @@
             
             const fetchUsers = async () => {
                 setIsLoading(true);
-                const { data, error } = await supabaseClient.from('profiles').select(`*, role(id, title), userlocation(location(*, city(*, province(title))))`).order('createdat', { ascending: false });
+                const { data, error } = await supabaseClient.from('profiles').select(`*, role(id, title), subscription_plan:subscription_plan_id(id, title), userlocation(location(*, city(*, province(title))))`).order('createdat', { ascending: false });
                 if (error) console.error(error);
                 else setUsers(data || []);
                 setIsLoading(false);
@@ -1075,7 +1223,6 @@
                         (user.fullname && user.fullname.toLowerCase().includes(lowerCaseSearch)) ||
                         (user.mobile && user.mobile.includes(lowerCaseSearch));
                     
-                    // Fix: Ensure both IDs are compared as strings to avoid type mismatch (number vs string)
                     const matchesRole = !filterRoleId || (user.role && String(user.role.id) === String(filterRoleId));
                     
                     return matchesSearch && matchesRole;
@@ -1132,6 +1279,7 @@
                                         <th className="px-6 py-3">عنوان</th>
                                         <th className="px-6 py-3">شماره موبایل</th>
                                         <th className="px-6 py-3 hidden sm:table-cell">موقعیت</th>
+                                        <th className="px-6 py-3">اشتراک</th>
                                         <th className="px-6 py-3">نقش</th>
                                         <th className="px-6 py-3">وضعیت</th>
                                         <th className="px-6 py-3">عملیات</th>
@@ -1139,9 +1287,9 @@
                                 </thead>
                                 <tbody>
                                     {isLoading ? (
-                                        <tr><td colSpan="8" className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></td></tr>
+                                        <tr><td colSpan="9" className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></td></tr>
                                     ) : filteredUsers.length === 0 ? (
-                                        <tr><td colSpan="8" className="text-center py-8 text-gray-500">هیچ کاربری یافت نشد.</td></tr>
+                                        <tr><td colSpan="9" className="text-center py-8 text-gray-500">هیچ کاربری یافت نشد.</td></tr>
                                     ) : (
                                         filteredUsers.map(user => {
                                             const province = user.userlocation[0]?.location?.city?.province?.title;
@@ -1169,6 +1317,22 @@
                                                     </td>
                                                     <td className="px-6 py-4 font-mono">{user.mobile || '-'}</td>
                                                     <td className="px-6 py-4 hidden sm:table-cell">{locationText}</td>
+                                                    <td className="px-6 py-4">
+                                                        {user.subscription_plan ? (
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 whitespace-nowrap inline-flex items-center w-fit">
+                                                                    <i className="fa-solid fa-crown mr-1"></i> {user.subscription_plan.title}
+                                                                </span>
+                                                                {user.subscription_start_date && (
+                                                                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mt-1">
+                                                                        شروع: {formatJalaali(user.subscription_start_date)}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-gray-400 dark:text-gray-500">-</span>
+                                                        )}
+                                                    </td>
                                                     <td className="px-6 py-4">
                                                         <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300">
                                                             {user.role?.title || 'Customer'}
@@ -1239,6 +1403,19 @@
                                             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                                 <i className="fa-solid fa-location-dot w-5 text-center text-gray-400"></i>
                                                 <span>{locationText}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-crown w-5 text-center text-yellow-500"></i>
+                                                <div className="flex flex-col">
+                                                    <span className={`${user.subscription_plan ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'} px-2 py-0.5 rounded text-xs w-fit`}>
+                                                        {user.subscription_plan?.title || 'بدون اشتراک'}
+                                                    </span>
+                                                    {user.subscription_plan && user.subscription_start_date && (
+                                                        <span className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                                            شروع: {formatJalaali(user.subscription_start_date)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                                 <i className="fa-solid fa-user-tag w-5 text-center text-gray-400"></i>
@@ -1362,19 +1539,19 @@
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <GenericManager
                             onSave={fetchData}
-                            title="ویژگی‌های آدرس"
-                            tableName="location_attribute_key"
-                            items={appData.locationAttributes}
-                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
-                        />
-                        <GenericManager
-                            onSave={fetchData}
                             title="نقش‌های کاربری"
                             tableName="role"
                             items={appData.roles}
                             confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
                             onManageAttributes={handleManageRoleAttributes}
                             attributeLabel="فیلدهای آدرس"
+                        />
+                        <GenericManager
+                            onSave={fetchData}
+                            title="ویژگی‌های آدرس"
+                            tableName="location_attribute_key"
+                            items={appData.locationAttributes}
+                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
                         />
                     </div>
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
@@ -1392,24 +1569,433 @@
         };
         
         // ==================================================
+        // Subscription Plan Manager Component (With Duration)
+        // ==================================================
+        const SubscriptionPlanManager = ({ onSave, items: initialItems, confirmModal }) => {
+            const [items, setItems] = useState(initialItems);
+            const [newItemName, setNewItemName] = useState('');
+            const [newItemDuration, setNewItemDuration] = useState(30);
+            const [editingItem, setEditingItem] = useState(null);
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState('');
+
+            useEffect(() => {
+                setItems(initialItems);
+            }, [initialItems]);
+
+            const handleAddItem = async (e) => {
+                e.preventDefault();
+                if (!newItemName.trim() || !newItemDuration) return;
+                setIsLoading(true);
+                setError('');
+
+                const { data, error } = await supabaseClient.from('subscription_plan').insert({ 
+                    title: newItemName.trim(),
+                    duration_days: parseInt(newItemDuration)
+                }).select().single();
+                
+                if (error) {
+                    setError(`خطا در افزودن: ${error.message}`);
+                } else {
+                    setItems(prev => [...prev, data]);
+                    setNewItemName('');
+                    setNewItemDuration(30);
+                    onSave();
+                }
+                setIsLoading(false);
+            };
+
+            const handleUpdateItem = async () => {
+                if (!editingItem || !editingItem.title.trim() || !editingItem.duration_days) return;
+                setIsLoading(true);
+                setError('');
+
+                const { error } = await supabaseClient.from('subscription_plan').update({ 
+                    title: editingItem.title.trim(),
+                    duration_days: parseInt(editingItem.duration_days)
+                }).eq('id', editingItem.id);
+
+                if (error) {
+                    setError(`خطا در به‌روزرسانی: ${error.message}`);
+                } else {
+                    setItems(prev => prev.map(item => item.id === editingItem.id ? editingItem : item));
+                    setEditingItem(null);
+                    onSave();
+                }
+                setIsLoading(false);
+            };
+
+            const requestDeleteItem = (item) => {
+                confirmModal({
+                    isOpen: true,
+                    message: `آیا از حذف طرح "${item.title}" اطمینان دارید؟`,
+                    onConfirm: () => executeDeleteItem(item.id)
+                });
+            };
+
+            const executeDeleteItem = async (itemId) => {
+                setIsLoading(true);
+                setError('');
+                const { error } = await supabaseClient.from('subscription_plan').delete().eq('id', itemId);
+                if (error) {
+                    setError(`خطا در حذف. ممکن است این طرح به کاربری اختصاص داده شده باشد.`);
+                } else {
+                    setItems(prev => prev.filter(item => item.id !== itemId));
+                    onSave();
+                }
+                setIsLoading(false);
+            };
+            
+            return (
+                <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700">
+                    <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                           <i className="fa-solid fa-crown text-yellow-500"></i>
+                           لیست طرح‌های اشتراک
+                        </h2>
+                        <span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full text-gray-500">{items.length} مورد</span>
+                    </div>
+                    
+                    <form onSubmit={handleAddItem} className="flex flex-col sm:flex-row gap-2 mb-4 bg-gray-50 dark:bg-gray-700/30 p-3 rounded-lg border border-gray-100 dark:border-gray-700">
+                        <div className="flex-grow">
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">نام طرح</label>
+                            <input
+                                type="text"
+                                value={newItemName}
+                                onChange={(e) => setNewItemName(e.target.value)}
+                                placeholder="مثال: اشتراک یک ماهه"
+                                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-yellow-500 focus:border-yellow-500 block p-2.5"
+                            />
+                        </div>
+                        <div className="sm:w-32">
+                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">مدت اعتبار (روز)</label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={newItemDuration}
+                                onChange={(e) => setNewItemDuration(e.target.value)}
+                                placeholder="30"
+                                className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-yellow-500 focus:border-yellow-500 block p-2.5 text-center"
+                                dir="ltr"
+                            />
+                        </div>
+                        <div className="flex items-end">
+                            <button type="submit" disabled={isLoading} className="w-full sm:w-auto text-yellow-900 bg-yellow-400 hover:bg-yellow-500 focus:ring-4 focus:ring-yellow-300 font-medium rounded-lg text-sm px-4 py-2.5 transition-colors">
+                                {isLoading ? <div className="spinner w-4 h-4 border-yellow-900"></div> : <i className="fa-solid fa-plus"></i>}
+                            </button>
+                        </div>
+                    </form>
+                    
+                    {error && <div className="p-3 mb-3 text-sm text-red-800 rounded-lg bg-red-50 dark:bg-gray-700 dark:text-red-400" role="alert">{error}</div>}
+                    
+                    <div className="max-h-96 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                        {items.map(item => (
+                            <div key={item.id} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors border border-transparent hover:border-gray-200 dark:hover:border-gray-600 gap-3">
+                                {editingItem?.id === item.id ? (
+                                    <div className="flex-grow flex flex-col sm:flex-row gap-2 w-full">
+                                        <input
+                                            type="text"
+                                            value={editingItem.title}
+                                            onChange={(e) => setEditingItem({ ...editingItem, title: e.target.value })}
+                                            className="flex-grow bg-white dark:bg-gray-600 border border-yellow-300 rounded p-1.5 text-sm"
+                                            placeholder="نام طرح"
+                                            autoFocus
+                                        />
+                                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                            <input
+                                                type="number"
+                                                value={editingItem.duration_days}
+                                                onChange={(e) => setEditingItem({ ...editingItem, duration_days: e.target.value })}
+                                                className="w-20 bg-white dark:bg-gray-600 border border-yellow-300 rounded p-1.5 text-sm text-center"
+                                                dir="ltr"
+                                                placeholder="روز"
+                                            />
+                                            <span className="text-xs text-gray-500">روز</span>
+                                            <div className="flex gap-1 mr-auto">
+                                                <button onClick={handleUpdateItem} className="text-green-600 hover:text-green-800 p-1 bg-green-100 dark:bg-green-900/30 rounded"><i className="fa-solid fa-check"></i></button>
+                                                <button onClick={() => setEditingItem(null)} className="text-red-500 hover:text-red-700 p-1 bg-red-100 dark:bg-red-900/30 rounded"><i className="fa-solid fa-times"></i></button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-sm font-bold text-gray-700 dark:text-gray-200">{item.title}</span>
+                                            <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2 py-0.5 rounded dark:bg-yellow-900/30 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+                                                {item.duration_days ? `${item.duration_days} روز` : 'نامشخص'}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-3 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity w-full sm:w-auto justify-end border-t sm:border-0 border-gray-200 dark:border-gray-600 pt-2 sm:pt-0">
+                                            <button onClick={() => setEditingItem(item)} className="text-indigo-500 hover:text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/30 p-1.5 rounded">
+                                                <i className="fa-regular fa-pen-to-square"></i> ویرایش
+                                            </button>
+                                            <button onClick={() => requestDeleteItem(item)} className="text-red-500 hover:text-red-700 bg-red-50 dark:bg-red-900/30 p-1.5 rounded">
+                                                <i className="fa-regular fa-trash-can"></i> حذف
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </div>
+                        ))}
+                        {items.length === 0 && <p className="text-center text-gray-400 text-sm py-4">هیچ موردی یافت نشد.</p>}
+                    </div>
+                </div>
+            );
+        };
+
+        // ==================================================
+        // Subscription Rules Manager Component (Category & Location)
+        // ==================================================
+        const SubscriptionRulesManager = ({ appData }) => {
+            const [categories, setCategories] = useState([]);
+            const [types, setTypes] = useState([]);
+            const [warehouses, setWarehouses] = useState([]);
+            const [discountValues, setDiscountValues] = useState({});
+            const [isLoading, setIsLoading] = useState(false);
+
+            const subType = types.find(t => t.title === 'مشمول اشتراک' || t.title === 'Subscription');
+            const subTypeId = subType?.id;
+            
+            const discountAttr = appData.locationAttributes?.find(a => a.title === 'درصد تخفیف اشتراک');
+            const discountAttrId = discountAttr?.id;
+
+            const loadData = async () => {
+                setIsLoading(true);
+                try {
+                    // 1. Fetch Categories and Types
+                    const [catRes, typeRes] = await Promise.all([
+                        supabaseClient.from('productcategory').select('*').order('title'),
+                        supabaseClient.from('producttype').select('*')
+                    ]);
+                    setCategories(catRes.data || []);
+                    setTypes(typeRes.data || []);
+
+                    // 2. Fetch Warehouses dynamically (Only locations that exist in supplierstock)
+                    const { data: stockData } = await supabaseClient.from('supplierstock').select('location_id');
+                    let uniqueLocIds = [];
+                    if (stockData) {
+                        uniqueLocIds = [...new Set(stockData.map(s => s.location_id))];
+                    }
+
+                    let locData = [];
+                    if (uniqueLocIds.length > 0) {
+                        const { data } = await supabaseClient.from('location').select('*').in('id', uniqueLocIds).order('title');
+                        locData = data || [];
+                    }
+                    setWarehouses(locData);
+
+                    // 3. Fetch location discount values
+                    if (discountAttrId && uniqueLocIds.length > 0) {
+                        const { data: valRes } = await supabaseClient.from('location_attribute_value')
+                            .select('*')
+                            .eq('attribute_id', discountAttrId)
+                            .in('location_id', uniqueLocIds);
+                        
+                        const valMap = {};
+                        if(valRes) {
+                            valRes.forEach(v => { valMap[v.location_id] = v.value });
+                        }
+                        setDiscountValues(valMap);
+                    }
+                } catch (e) {
+                    console.error("Error loading rules data:", e);
+                }
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                loadData();
+            }, [discountAttrId]);
+
+            const toggleCategory = async (cat) => {
+                if (!subTypeId) return alert("نوع محصول 'مشمول اشتراک' در دیتابیس یافت نشد.");
+                setIsLoading(true);
+                const isCurrentlySub = cat.producttypeid === subTypeId;
+                const newTypeId = isCurrentlySub ? null : subTypeId;
+                
+                await supabaseClient.from('productcategory').update({ producttypeid: newTypeId }).eq('id', cat.id);
+                await loadData();
+            };
+
+            const handleDiscountChange = (locId, val) => {
+                setDiscountValues(prev => ({...prev, [locId]: val}));
+            };
+
+            const saveLocationDiscount = async (locId) => {
+                if (!discountAttrId) return alert("ویژگی 'درصد تخفیف اشتراک' در دیتابیس یافت نشد.");
+                setIsLoading(true);
+                const val = discountValues[locId];
+                
+                try {
+                    if (!val || val === '0' || val === '') {
+                        // Delete if empty or 0
+                        await supabaseClient.from('location_attribute_value').delete().match({ location_id: locId, attribute_id: discountAttrId });
+                    } else {
+                        // Upsert logic (Check if exists, then update or insert)
+                        const { data } = await supabaseClient.from('location_attribute_value')
+                            .select('id')
+                            .match({ location_id: locId, attribute_id: discountAttrId })
+                            .maybeSingle();
+                            
+                        if (data) {
+                            await supabaseClient.from('location_attribute_value').update({ value: val }).eq('id', data.id);
+                        } else {
+                            await supabaseClient.from('location_attribute_value').insert({ location_id: locId, attribute_id: discountAttrId, value: val });
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+                await loadData();
+            };
+
+            if (!subTypeId || !discountAttrId) {
+                return (
+                    <div className="bg-yellow-50 dark:bg-yellow-900/20 p-5 rounded-xl border border-yellow-200 dark:border-yellow-800 text-yellow-800 dark:text-yellow-300">
+                        <p className="font-bold mb-2 flex items-center gap-2"><i className="fa-solid fa-triangle-exclamation"></i> نیاز به تنظیمات پایگاه داده</p>
+                        <p className="text-sm">برای فعال‌سازی بخش قوانین اشتراک، لطفاً ابتدا اسکریپت SQL ارائه شده در چت را در Supabase اجرا کنید تا مقادیر پایه ساخته شوند.</p>
+                        <button onClick={loadData} className="mt-4 bg-yellow-100 dark:bg-yellow-800 px-4 py-2 rounded-lg text-sm font-bold hover:bg-yellow-200 dark:hover:bg-yellow-700 transition-colors">
+                            <i className="fa-solid fa-rotate-right ml-1"></i> بررسی مجدد
+                        </button>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 relative">
+                    {isLoading && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
+                            <div className="spinner w-8 h-8 border-indigo-600"></div>
+                        </div>
+                    )}
+                    
+                    {/* Categories Column */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-96">
+                        <h3 className="font-bold text-lg mb-1 text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                            <i className="fa-solid fa-layer-group"></i> دسته‌بندی‌های مشمول
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">با فعال کردن هر دسته، تمامی کالاهای آن برای کاربران اشتراکی تخفیف خواهند گرفت.</p>
+                        
+                        <div className="overflow-y-auto pr-1 space-y-2 flex-1 custom-scrollbar">
+                            {categories.map(cat => {
+                                const isSub = cat.producttypeid === subTypeId;
+                                return (
+                                    <div key={cat.id} className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${isSub ? 'bg-indigo-50 border-indigo-200 dark:bg-indigo-900/20 dark:border-indigo-800' : 'bg-gray-50 border-transparent dark:bg-gray-700/30'}`}>
+                                        <span className={`text-sm font-medium ${isSub ? 'text-indigo-700 dark:text-indigo-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                                            {cat.title}
+                                        </span>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input type="checkbox" className="sr-only peer" checked={isSub} onChange={() => toggleCategory(cat)} />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:right-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
+                                        </label>
+                                    </div>
+                                )
+                            })}
+                            {categories.length === 0 && <p className="text-center text-sm text-gray-400 mt-10">دسته‌بندی یافت نشد.</p>}
+                        </div>
+                    </div>
+
+                    {/* Locations Column */}
+                    <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-96">
+                        <h3 className="font-bold text-lg mb-1 text-teal-600 dark:text-teal-400 flex items-center gap-2">
+                            <i className="fa-solid fa-warehouse"></i> درصد تخفیف انبارها
+                        </h3>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">انبارها از جدول Supplier Stock استخراج شده‌اند. درصد تخفیف برای کالاهای مشمول را وارد کنید.</p>
+                        
+                        <div className="overflow-y-auto pr-1 space-y-2 flex-1 custom-scrollbar">
+                            {warehouses.map(loc => {
+                                const currentVal = discountValues[loc.id] || '';
+                                const hasDiscount = parseFloat(currentVal) > 0;
+                                return (
+                                    <div key={loc.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border transition-colors gap-3 ${hasDiscount ? 'bg-teal-50 border-teal-200 dark:bg-teal-900/20 dark:border-teal-800' : 'bg-gray-50 border-transparent dark:bg-gray-700/30'}`}>
+                                        <div className="flex-1 truncate">
+                                            <span className={`text-sm font-medium flex items-center gap-2 ${hasDiscount ? 'text-teal-700 dark:text-teal-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                                                <span className="truncate">{loc.title || 'بدون عنوان'}</span>
+                                                <span className="text-xs font-mono opacity-70 bg-gray-200 dark:bg-gray-600 px-1.5 py-0.5 rounded flex-shrink-0" dir="ltr">ID: {loc.id}</span>
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <div className="relative w-24">
+                                                <input 
+                                                    type="number" 
+                                                    min="0" 
+                                                    max="100"
+                                                    value={currentVal} 
+                                                    onChange={(e) => handleDiscountChange(loc.id, e.target.value)} 
+                                                    placeholder="0"
+                                                    className="w-full bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 text-sm rounded-lg focus:ring-teal-500 focus:border-teal-500 block p-2 text-center"
+                                                    dir="ltr"
+                                                />
+                                                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none text-gray-400 text-xs">%</div>
+                                            </div>
+                                            <button onClick={() => saveLocationDiscount(loc.id)} className="bg-teal-500 hover:bg-teal-600 text-white p-2 rounded-lg transition-colors">
+                                                <i className="fa-solid fa-save"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                            {warehouses.length === 0 && <p className="text-center text-sm text-gray-400 mt-10">انباری در سیستم ثبت نشده است.</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // ==================================================
+        // Subscription Settings Component
+        // ==================================================
+        const SubscriptionSettings = ({ appData, fetchData }) => {
+            const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
+
+            return (
+                <div className="animate-fadeIn space-y-8">
+                    <div>
+                        <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">تنظیمات اشتراک‌ها</h1>
+                        <p className="text-gray-500 dark:text-gray-400 mb-6">مدیریت طرح‌ها و تعیین مدت زمان اعتبار هر اشتراک</p>
+                        
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="lg:col-span-2">
+                                <SubscriptionPlanManager
+                                    onSave={fetchData}
+                                    items={appData.subscriptionPlans}
+                                    confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
+                        <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">قوانین و تخفیف‌های اشتراک</h2>
+                        <p className="text-gray-500 dark:text-gray-400 mb-6">تعیین دسته‌بندی‌های مشمول و درصد تخفیف انبارها</p>
+                        <SubscriptionRulesManager appData={appData} />
+                    </div>
+
+                    <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
+                </div>
+            );
+        };
+
+        // ==================================================
         // Main App Component
         // ==================================================
         const App = () => {
             const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light'); // Default to light for better visibility first
             const [currentPage, setCurrentPage] = useState('users');
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-            const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [] });
+            const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [], subscriptionPlans: [] });
             const [isLoading, setIsLoading] = useState(true);
 
             const fetchAppData = useCallback(async () => {
                 setIsLoading(true);
                 try {
-                    const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes] = await Promise.all([
+                    const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes, subPlanRes] = await Promise.all([
                         supabaseClient.from('role').select('*').order('title'),
                         supabaseClient.from('province').select('*').order('title'),
                         supabaseClient.from('marketingchannel').select('*').order('title'),
                         supabaseClient.from('shippingcompany').select('*').order('title'),
-                        supabaseClient.from('location_attribute_key').select('*').order('title')
+                        supabaseClient.from('location_attribute_key').select('*').order('title'),
+                        supabaseClient.from('subscription_plan').select('*').order('title') // Changed to new table
                     ]);
                     
                     setAppData({
@@ -1417,7 +2003,8 @@
                         provinces: provinceRes.data || [],
                         marketingChannels: channelRes.data || [],
                         shippingCompanies: shippingRes.data || [],
-                        locationAttributes: locAttrRes.data || []
+                        locationAttributes: locAttrRes.data || [],
+                        subscriptionPlans: subPlanRes.data || [] 
                     });
                 } catch (error) {
                     console.error("Initial data fetch error:", error);
@@ -1447,6 +2034,7 @@
                 }
                 switch (currentPage) {
                     case 'users': return <UserManagement appData={appData} fetchData={fetchAppData} />;
+                    case 'subscriptions': return <SubscriptionSettings appData={appData} fetchData={fetchAppData} />;
                     case 'settings': return <SettingsManagement appData={appData} fetchData={fetchAppData} />;
                     default: return <UserManagement appData={appData} fetchData={fetchAppData} />;
                 }
@@ -1473,6 +2061,7 @@
                     <nav className="flex-1 p-4">
                         <ul className="space-y-2">
                             <NavItem page="users" icon="fa-users">مدیریت کاربران</NavItem>
+                            <NavItem page="subscriptions" icon="fa-crown">تنظیمات اشتراک‌</NavItem>
                             <NavItem page="settings" icon="fa-sliders">تنظیمات فرم‌ها</NavItem>
                         </ul>
                     </nav>
