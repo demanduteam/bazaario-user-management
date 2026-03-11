@@ -1453,6 +1453,7 @@
             const [cohortData, setCohortData] = useState([]);
             const [metrics, setMetrics] = useState({ total: 0, expired: 0, churnRate: 0 });
             const [isLoading, setIsLoading] = useState(true);
+            const [maxDisplayMonths, setMaxDisplayMonths] = useState(5);
 
             useEffect(() => {
                 const fetchChurnData = async () => {
@@ -1528,8 +1529,20 @@
                         const currentJ = jalaali.toJalaali(now.getFullYear(), now.getMonth() + 1, now.getDate());
                         const currentTotalMonths = currentJ.jy * 12 + currentJ.jm;
 
-                        const finalCohortData = [];
+                        // Find the max dynamically needed columns
+                        let maxCols = 0;
                         const sortedCohortKeys = Object.keys(cohorts).sort();
+                        sortedCohortKeys.forEach(cohortStr => {
+                            const [cy, cm] = cohortStr.split('-').map(Number);
+                            const cohortTotalMonths = cy * 12 + cm;
+                            const maxMonths = currentTotalMonths - cohortTotalMonths;
+                            if (maxMonths > maxCols) maxCols = maxMonths;
+                        });
+                        
+                        // Limit to at least 5 months to look nice, maximum 12 months for UI limits
+                        const displayColumnsCount = Math.min(Math.max(5, maxCols), 12);
+
+                        const finalCohortData = [];
 
                         // Calculate Retention for each cohort
                         sortedCohortKeys.forEach(cohortStr => {
@@ -1540,7 +1553,7 @@
                             const usersInCohort = cohorts[cohortStr].users;
                             const retention = [];
 
-                            for (let i = 0; i <= Math.min(maxMonths, 5); i++) { // Render up to month 5
+                            for (let i = 0; i <= Math.min(maxMonths, displayColumnsCount); i++) {
                                 if (i === 0) {
                                     retention.push(100);
                                     continue;
@@ -1569,8 +1582,8 @@
                                 retention.push(Math.round((activeCount / usersInCohort.length) * 100));
                             }
 
-                            // Pad future months with nulls
-                            while (retention.length < 6) {
+                            // Pad future months with nulls dynamically
+                            while (retention.length <= displayColumnsCount) {
                                 retention.push(null);
                             }
 
@@ -1592,6 +1605,7 @@
                         const avgRetM1 = countM1 > 0 ? (sumM1 / countM1) : 100;
                         const avgChurn = countM1 > 0 ? (100 - avgRetM1).toFixed(1) : 0;
 
+                        setMaxDisplayMonths(displayColumnsCount);
                         setCohortData(finalCohortData.reverse()); // Show newest cohorts first
                         setMetrics({ total: totalUsers, expired: expiredUsers, churnRate: avgChurn });
                     } catch (e) {
@@ -1672,12 +1686,9 @@
                                         <tr>
                                             <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 text-right pl-4 border-b border-gray-200 dark:border-gray-700">ماه عضویت</th>
                                             <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">تعداد کاربر</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۰</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۱</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۲</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۳</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۴</th>
-                                            <th className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه ۵</th>
+                                            {Array.from({ length: maxDisplayMonths + 1 }).map((_, i) => (
+                                                <th key={i} className="font-medium text-gray-500 dark:text-gray-400 pb-4 border-b border-gray-200 dark:border-gray-700">ماه {i}</th>
+                                            ))}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -1685,7 +1696,7 @@
                                             <tr key={idx}>
                                                 <td className="py-2 text-right pl-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.month}</td>
                                                 <td className="py-2 font-bold text-gray-700 dark:text-gray-300">{row.newUsers}</td>
-                                                {row.retention.map((val, i) => (
+                                                {row.retention.slice(0, maxDisplayMonths + 1).map((val, i) => (
                                                     <td key={i} className="py-1 px-1 min-w-[50px]">
                                                         <div className={`h-10 flex items-center justify-center rounded font-medium ${getColorOpacity(val)}`}>
                                                             {val !== null ? `${val}%` : ''}
