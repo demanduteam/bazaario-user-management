@@ -1016,11 +1016,20 @@
                                     <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">شماره موبایل دوم</label>
                                     <input type="tel" name="emergencyphonenumber" value={formData.emergencyphonenumber} onChange={handleChange} placeholder="شماره تماس اضطراری" className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" />
                                 </div>
-                                <div>
-                                    <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نقش</label>
-                                    <select name="roleid" value={formData.roleid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required>
-                                        {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
-                                    </select>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">نقش</label>
+                                        <select name="roleid" value={formData.roleid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5" required>
+                                            {roles.map(role => <option key={role.id} value={role.id}>{role.title}</option>)}
+                                        </select>
+                                    </div>
+                                    <div className="col-span-2 sm:col-span-1">
+                                        <label className="block mb-2 text-sm font-medium text-gray-900 dark:text-white">کانال جذب (اختیاری)</label>
+                                        <select name="marketingchannelid" value={formData.marketingchannelid} onChange={handleChange} className="bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5">
+                                            <option value="">انتخاب کانال...</option>
+                                            {marketingChannels?.map(channel => <option key={channel.id} value={channel.id}>{channel.title}</option>)}
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1840,6 +1849,13 @@
                             confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
                             onManageAttributes={handleManageRoleAttributes}
                             attributeLabel="فیلدهای آدرس"
+                        />
+                        <GenericManager
+                            onSave={fetchData}
+                            title="کانال‌های جذب"
+                            tableName="marketingchannel"
+                            items={appData.marketingChannels}
+                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
                         />
                         <GenericManager
                             onSave={fetchData}
