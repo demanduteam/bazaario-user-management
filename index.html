@@ -1459,10 +1459,10 @@
                 const fetchChurnData = async () => {
                     setIsLoading(true);
                     try {
-                        // Fetch current profiles to find active/expired statuses
+                        // Fetch current profiles to find active/expired statuses and fullnames for tooltip
                         const { data: profiles } = await supabaseClient
                             .from('profiles')
-                            .select('id, subscription_plan_id, subscription_start_date, subscription_plan:subscription_plan_id(duration_days)');
+                            .select('id, fullname, subscription_plan_id, subscription_start_date, subscription_plan:subscription_plan_id(duration_days)');
                         
                         // Fetch history for building cohorts
                         const { data: history } = await supabaseClient
@@ -1472,10 +1472,12 @@
                         let totalUsers = 0;
                         let expiredUsers = 0;
                         const now = new Date();
+                        const userNamesMap = {};
 
-                        // 1. Calculate Top Metrics
+                        // 1. Calculate Top Metrics & Build user names lookup
                         if (profiles) {
                             profiles.forEach(p => {
+                                userNamesMap[p.id] = p.fullname || 'کاربر نامشخص';
                                 if (p.subscription_plan_id && p.subscription_start_date) {
                                     totalUsers++;
                                     const start = new Date(p.subscription_start_date);
@@ -1555,7 +1557,11 @@
 
                             for (let i = 0; i <= Math.min(maxMonths, displayColumnsCount); i++) {
                                 if (i === 0) {
-                                    retention.push(100);
+                                    // For month 0, all initial users are active
+                                    retention.push({
+                                        percentage: 100,
+                                        activeUsers: usersInCohort.map(id => userNamesMap[id] || 'کاربر نامشخص')
+                                    });
                                     continue;
                                 }
                                 
@@ -1571,15 +1577,23 @@
                                 const targetEnd = new Date(ey, em - 1, ed, 23, 59, 59);
 
                                 let activeCount = 0;
+                                let activeUsersList = [];
+
                                 usersInCohort.forEach(userId => {
                                     const subs = userHistories[userId];
                                     const isActive = subs.some(sub => {
                                         return sub.startDate <= targetEnd && sub.endDate >= targetStart; // overlap check
                                     });
-                                    if (isActive) activeCount++;
+                                    if (isActive) {
+                                        activeCount++;
+                                        activeUsersList.push(userNamesMap[userId] || 'کاربر نامشخص');
+                                    }
                                 });
 
-                                retention.push(Math.round((activeCount / usersInCohort.length) * 100));
+                                retention.push({
+                                    percentage: Math.round((activeCount / usersInCohort.length) * 100),
+                                    activeUsers: activeUsersList
+                                });
                             }
 
                             // Pad future months with nulls dynamically
@@ -1598,7 +1612,7 @@
                         let sumM1 = 0, countM1 = 0;
                         finalCohortData.forEach(c => {
                             if (c.retention[1] !== null) {
-                                sumM1 += c.retention[1];
+                                sumM1 += c.retention[1].percentage;
                                 countM1++;
                             }
                         });
@@ -1618,7 +1632,7 @@
             }, []);
 
             const getColorOpacity = (percentage) => {
-                if (percentage === null) return 'bg-gray-50 dark:bg-gray-800 text-transparent';
+                if (percentage === null || percentage === undefined) return 'bg-gray-50 dark:bg-gray-800 text-transparent';
                 if (percentage === 100) return 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-800 dark:text-indigo-200';
                 if (percentage >= 85) return 'bg-indigo-200 dark:bg-indigo-800/60 text-indigo-900 dark:text-white';
                 if (percentage >= 70) return 'bg-indigo-300 dark:bg-indigo-700/80 text-indigo-900 dark:text-white';
@@ -1675,7 +1689,7 @@
                                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">این جدول نشان می‌دهد کاربرانی که در یک ماه خاص اولین اشتراک خود را ثبت کرده‌اند، در ماه‌های بعدی چقدر فعال مانده‌اند.</p>
                             </div>
                         </div>
-                        <div className="overflow-x-auto p-6">
+                        <div className="overflow-x-auto p-6 pb-24">
                             {cohortData.length === 0 && !isLoading ? (
                                 <div className="text-center py-10 text-gray-500 dark:text-gray-400">
                                     داده‌ای برای نمایش کوهورت وجود ندارد. لطفاً ابتدا به کاربرانی اشتراک اختصاص دهید.
@@ -1697,10 +1711,23 @@
                                                 <td className="py-2 text-right pl-4 font-medium text-gray-900 dark:text-white whitespace-nowrap">{row.month}</td>
                                                 <td className="py-2 font-bold text-gray-700 dark:text-gray-300">{row.newUsers}</td>
                                                 {row.retention.slice(0, maxDisplayMonths + 1).map((val, i) => (
-                                                    <td key={i} className="py-1 px-1 min-w-[50px]">
-                                                        <div className={`h-10 flex items-center justify-center rounded font-medium ${getColorOpacity(val)}`}>
-                                                            {val !== null ? `${val}%` : ''}
+                                                    <td key={i} className="py-1 px-1 min-w-[50px] relative group hover:z-50 cursor-default">
+                                                        <div className={`h-10 flex items-center justify-center rounded font-medium transition-colors ${getColorOpacity(val ? val.percentage : null)}`}>
+                                                            {val !== null ? `${val.percentage}%` : ''}
                                                         </div>
+                                                        {val !== null && val.activeUsers && val.activeUsers.length > 0 && (
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:flex flex-col z-[100] w-48 bg-gray-800 dark:bg-gray-900 text-white text-xs rounded-lg shadow-xl border border-gray-700 pointer-events-none">
+                                                                <div className="text-center font-bold px-2 py-1.5 border-b border-gray-700 text-gray-200 bg-gray-900/50 rounded-t-lg">
+                                                                    مشتریان فعال ({val.activeUsers.length} نفر)
+                                                                </div>
+                                                                <div className="p-2 max-h-32 overflow-y-auto custom-scrollbar flex flex-col gap-1">
+                                                                    {val.activeUsers.map((name, idx) => (
+                                                                        <span key={idx} className="text-right truncate">• {name}</span>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 border-[5px] border-transparent border-t-gray-800 dark:border-t-gray-900"></div>
+                                                            </div>
+                                                        )}
                                                     </td>
                                                 ))}
                                             </tr>
