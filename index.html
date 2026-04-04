@@ -23,7 +23,7 @@
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- React & ReactDOM (Using cdnjs for better reliability) -->
+    <!-- React & ReactDOM -->
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.min.js"></script>
     <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.min.js"></script>
     
@@ -36,7 +36,7 @@
     <!-- Jalaali JS -->
     <script src="https://cdn.jsdelivr.net/npm/jalaali-js/dist/jalaali.js"></script>
 
-    <!-- React Multi Date Picker & Dependencies (FIXED LINKS) -->
+    <!-- React Multi Date Picker & Dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/date-object@3.3.4/build/date-object.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-element-popper@2.1.6/build/browser.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/react-multi-date-picker@3.3.4/build/react-multi-date-picker.min.js"></script>
@@ -55,33 +55,6 @@
         .light ::-webkit-scrollbar-track { background: #e5e7eb; }
         .light ::-webkit-scrollbar-thumb { background-color: #9ca3af; border-radius: 10px; border: 2px solid #e5e7eb; }
         
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
-            backdrop-filter: blur(4px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 50;
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease-in-out;
-        }
-        .modal-overlay.open {
-            opacity: 1;
-            visibility: visible;
-        }
-        .modal-content {
-            transform: scale(0.95);
-            transition: transform 0.3s ease-in-out;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        .modal-overlay.open .modal-content {
-            transform: scale(1);
-        }
-        
         .spinner {
             border: 2px solid rgba(0,0,0,0.1);
             border-left-color: #4f46e5;
@@ -97,6 +70,23 @@
         @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+        }
+
+        .animate-fadeIn {
+            animation: fadeIn 0.3s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        /* New reliable modal animation */
+        .animate-scaleIn {
+            animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.95) translateY(10px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
         }
     </style>
 </head>
@@ -136,18 +126,19 @@
             }
         };
 
-        const Modal = ({ isOpen, onClose, title, children }) => {
+        // REWRITTEN MODAL: Uses pure Tailwind to fix display bugs on mobile/safari
+        const Modal = ({ isOpen, onClose, title, children, size = "max-w-3xl" }) => {
             if (!isOpen) return null;
             return (
-                <div className={`modal-overlay ${isOpen ? 'open' : ''}`} onClick={onClose}>
-                    <div className="modal-content bg-white dark:bg-gray-800 w-11/12 max-w-3xl rounded-xl shadow-2xl flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="flex justify-between items-center p-5 border-b border-gray-100 dark:border-gray-700">
-                            <h2 className="text-xl font-bold text-gray-800 dark:text-white">{title}</h2>
-                            <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-sm animate-fadeIn" onClick={onClose}>
+                    <div className={`bg-white dark:bg-gray-800 w-full ${size} max-h-[90vh] rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-scaleIn`} onClick={e => e.stopPropagation()}>
+                        <div className="flex justify-between items-center p-4 sm:p-5 border-b border-gray-100 dark:border-gray-700 shrink-0">
+                            <h2 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">{title}</h2>
+                            <button onClick={onClose} className="text-gray-400 hover:text-red-500 transition-colors w-8 h-8 flex items-center justify-center rounded-full hover:bg-red-50 dark:hover:bg-red-900/20 focus:outline-none">
                                 <i className="fa-solid fa-times text-lg"></i>
                             </button>
                         </div>
-                        <div className="p-5 overflow-y-auto custom-scrollbar">
+                        <div className="p-4 sm:p-5 overflow-y-auto custom-scrollbar flex-1">
                             {children}
                         </div>
                     </div>
@@ -158,7 +149,7 @@
         const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message }) => {
             if (!isOpen) return null;
             return (
-                <Modal isOpen={isOpen} onClose={onClose} title={title}>
+                <Modal isOpen={isOpen} onClose={onClose} title={title} size="max-w-md">
                     <div className="text-center sm:text-right">
                         <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4 sm:mx-0 sm:h-10 sm:w-10 sm:inline-flex sm:float-right sm:ml-4">
                             <i className="fa-solid fa-triangle-exclamation text-red-600 dark:text-red-400"></i>
@@ -222,7 +213,7 @@
                             onChange={e => setSearchTerm(e.target.value)}
                             onFocus={() => setIsOpen(true)}
                             disabled={disabled}
-                            className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block w-full p-2.5 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-lg focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         />
                         <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                             <i className={`fa-solid fa-chevron-down text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}></i>
@@ -422,7 +413,7 @@
                                 value={formData.provinceid}
                                 onChange={(id) => {
                                     handleSelectChange('provinceid', id);
-                                    handleSelectChange('cityid', ''); // Reset city when province changes
+                                    handleSelectChange('cityid', '');
                                 }}
                                 placeholder="جستجو یا انتخاب استان..."
                             />
@@ -1176,16 +1167,175 @@
             );
         };
 
+        // ==================================================
+        // Customer Followup Component
+        // ==================================================
+        const FollowupModal = ({ isOpen, onClose, user, onSave }) => {
+            const [followups, setFollowups] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [formData, setFormData] = useState({
+                action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending'
+            });
+
+            const fetchFollowups = async () => {
+                setIsLoading(true);
+                const { data } = await supabaseClient
+                    .from('customer_followups')
+                    .select('*')
+                    .eq('customer_id', user.id)
+                    .order('created_at', { ascending: false });
+                setFollowups(data || []);
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                if (isOpen && user) {
+                    fetchFollowups();
+                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending' });
+                }
+            }, [isOpen, user]);
+
+            const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setIsSubmitting(true);
+                
+                const payload = {
+                    customer_id: user.id,
+                    action_taken: formData.action_taken || null,
+                    notes: formData.notes || null,
+                    next_action_notes: formData.next_action_notes || null,
+                    status: formData.status
+                };
+                
+                if (formData.next_action_date) {
+                    payload.next_action_date = formData.next_action_date;
+                }
+
+                await supabaseClient.from('customer_followups').insert(payload);
+                setIsSubmitting(false);
+                fetchFollowups();
+                if(onSave) onSave();
+            };
+
+            const getStatusLabel = (status) => {
+                switch(status) {
+                    case 'pending': return <span className="bg-orange-100 text-orange-800 px-2 py-0.5 rounded text-xs">در انتظار</span>;
+                    case 'completed': return <span className="bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">تکمیل شده</span>;
+                    case 'canceled': return <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs">لغو شده</span>;
+                    default: return <span className="bg-gray-100 text-gray-800 px-2 py-0.5 rounded text-xs">{status}</span>;
+                }
+            };
+
+            return (
+                <Modal isOpen={isOpen} onClose={onClose} title={`پیگیری مشتری: ${user?.fullname || user?.mobile}`} size="max-w-5xl">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-1 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 h-fit">
+                            <h3 className="font-bold mb-4 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-2">ثبت پیگیری جدید</h3>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">اقدام انجام شده</label>
+                                    <input type="text" name="action_taken" value={formData.action_taken} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm" placeholder="مثال: تماس تلفنی" required />
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">توضیحات/نتیجه</label>
+                                    <textarea name="notes" value={formData.notes} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm" rows="3" placeholder="جزئیات مذاکره..."></textarea>
+                                </div>
+                                <div className="border-t border-gray-200 dark:border-gray-600 pt-3 mt-2">
+                                    <label className="block text-xs text-indigo-500 font-bold mb-2">اقدام بعدی (Next Action)</label>
+                                    <div className="mb-3">
+                                        <label className="block text-xs text-gray-500 mb-1">تاریخ اقدام بعدی</label>
+                                        {DatePickerComponent ? (
+                                            <DatePickerComponent
+                                                calendar={persianCalendar} locale={persianLocale}
+                                                value={formData.next_action_date ? new Date(formData.next_action_date) : ""}
+                                                onChange={(date) => {
+                                                    if (!date) return handleChange({ target: { name: 'next_action_date', value: '' } });
+                                                    const { gy, gm, gd } = jalaali.toGregorian(date.year, date.month.number, date.day);
+                                                    handleChange({ target: { name: 'next_action_date', value: `${gy}-${String(gm).padStart(2, '0')}-${String(gd).padStart(2, '0')}` } });
+                                                }}
+                                                inputClass="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm text-left"
+                                                containerStyle={{ width: '100%' }} format="YYYY/MM/DD" placeholder="انتخاب تاریخ..."
+                                            />
+                                        ) : (
+                                            <input type="date" name="next_action_date" value={formData.next_action_date} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm text-left" dir="ltr" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs text-gray-500 mb-1">یادداشت اقدام بعدی</label>
+                                        <textarea name="next_action_notes" value={formData.next_action_notes} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm" rows="2" placeholder="مثال: ارسال پیش‌فاکتور..."></textarea>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-gray-500 mb-1">وضعیت پیگیری</label>
+                                    <select name="status" value={formData.status} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm">
+                                        <option value="pending">در انتظار</option>
+                                        <option value="completed">تکمیل شده</option>
+                                        <option value="canceled">لغو شده</option>
+                                    </select>
+                                </div>
+                                <button type="submit" disabled={isSubmitting} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg text-sm transition-colors flex justify-center items-center gap-2">
+                                    {isSubmitting ? <div className="spinner w-4 h-4 border-white"></div> : <i className="fa-solid fa-plus"></i>} ثبت پیگیری
+                                </button>
+                            </form>
+                        </div>
+                        
+                        <div className="lg:col-span-2">
+                            <h3 className="font-bold mb-4 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">تاریخچه ارتباطات</h3>
+                            {isLoading ? (
+                                <div className="flex justify-center py-10"><div className="spinner w-8 h-8 border-indigo-500"></div></div>
+                            ) : followups.length === 0 ? (
+                                <div className="text-center text-gray-500 py-10 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">هیچ سابقه پیگیری ثبت نشده است.</div>
+                            ) : (
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                                    {followups.map(fw => (
+                                        <div key={fw.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 relative">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="font-bold text-indigo-600 dark:text-indigo-400 text-sm flex items-center gap-2">
+                                                    <i className="fa-solid fa-comment-dots"></i> {fw.action_taken || 'اقدام نامشخص'}
+                                                </h4>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className="text-xs text-gray-400" dir="ltr">{new Date(fw.created_at).toLocaleString('fa-IR')}</span>
+                                                    {getStatusLabel(fw.status)}
+                                                </div>
+                                            </div>
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg mb-3 whitespace-pre-wrap">{fw.notes || '-'}</p>
+                                            
+                                            {(fw.next_action_date || fw.next_action_notes) && (
+                                                <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800/50 mt-2">
+                                                    <h5 className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-1 flex items-center gap-1">
+                                                        <i className="fa-solid fa-calendar-check"></i> اقدام بعدی
+                                                    </h5>
+                                                    {fw.next_action_date && <p className="text-xs text-blue-700 dark:text-blue-400 mb-1">تاریخ: {formatJalaali(fw.next_action_date)}</p>}
+                                                    {fw.next_action_notes && <p className="text-xs text-blue-600 dark:text-blue-300 whitespace-pre-wrap">{fw.next_action_notes}</p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Modal>
+            );
+        }
+
         const UserManagement = ({ appData, fetchData }) => {
             const [users, setUsers] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
             const [isModalOpen, setIsModalOpen] = useState(false);
             const [editingUser, setEditingUser] = useState(null);
+            
+            const [isFollowupModalOpen, setIsFollowupModalOpen] = useState(false);
+            const [followupUser, setFollowupUser] = useState(null);
+
             const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
             const [searchTerm, setSearchTerm] = useState('');
-            const [filterRoleId, setFilterRoleId] = useState(''); // New state for role filter
+            const [filterRoleId, setFilterRoleId] = useState('');
+            const [filterActivity, setFilterActivity] = useState('all');
             
-            // Map database values to display labels
             const prefixMap = {
                 'Mr': 'جناب',
                 'Mrs': 'بانو',
@@ -1194,9 +1344,42 @@
             
             const fetchUsers = async () => {
                 setIsLoading(true);
-                const { data, error } = await supabaseClient.from('profiles').select(`*, role(id, title), subscription_plan:subscription_plan_id(id, title), userlocation(location(*, city(*, province(title))))`).order('createdat', { ascending: false });
-                if (error) console.error(error);
-                else setUsers(data || []);
+                
+                // Safe fetch with fallback for demand/demandinvoice if they don't exist
+                let { data, error } = await supabaseClient.from('profiles').select(`
+                    *, 
+                    role(id, title), 
+                    subscription_plan:subscription_plan_id(id, title), 
+                    userlocation(location(*, city(*, province(title)))),
+                    customer_followups(created_at, action_taken, status),
+                    demandinvoice(id, createdat),
+                    demand(id, createdat)
+                `).order('createdat', { ascending: false });
+
+                if (error) {
+                    // Fallback without demand/demandinvoice (in case those tables are not created yet)
+                    const fallback = await supabaseClient.from('profiles').select(`
+                        *, 
+                        role(id, title), 
+                        subscription_plan:subscription_plan_id(id, title), 
+                        userlocation(location(*, city(*, province(title)))),
+                        customer_followups(created_at, action_taken, status)
+                    `).order('createdat', { ascending: false });
+                    
+                    if (fallback.error) {
+                         const minFallback = await supabaseClient.from('profiles').select(`
+                            *, 
+                            role(id, title), 
+                            subscription_plan:subscription_plan_id(id, title), 
+                            userlocation(location(*, city(*, province(title))))
+                         `).order('createdat', { ascending: false });
+                         data = minFallback.data;
+                    } else {
+                         data = fallback.data;
+                    }
+                }
+
+                setUsers(data || []);
                 setIsLoading(false);
             };
 
@@ -1212,6 +1395,9 @@
             const handleOpenModal = (user = null) => { setEditingUser(user); setIsModalOpen(true); };
             const handleCloseModal = () => { setIsModalOpen(false); setEditingUser(null); };
             
+            const handleOpenFollowup = (user) => { setFollowupUser(user); setIsFollowupModalOpen(true); };
+            const handleCloseFollowup = () => { setIsFollowupModalOpen(false); setFollowupUser(null); };
+
             const handleDeleteRequest = (userId, isDeleted) => {
                 setConfirmState({ isOpen: true, message: `آیا از ${isDeleted ? 'فعال کردن' : 'غیرفعال کردن'} این کاربر اطمینان دارید؟`, onConfirm: () => executeSoftDelete(userId, isDeleted) });
             };
@@ -1234,20 +1420,114 @@
                     
                     const matchesRole = !filterRoleId || (user.role && String(user.role.id) === String(filterRoleId));
                     
-                    return matchesSearch && matchesRole;
+                    let matchesActivity = true;
+                    if (filterActivity === 'subscribed') {
+                        matchesActivity = !!user.subscription_plan_id;
+                    } else if (filterActivity === 'purchased') {
+                        matchesActivity = user.demandinvoice && user.demandinvoice.length > 0;
+                    } else if (filterActivity === 'requested') {
+                        const hasRequests = user.demand && user.demand.length > 0;
+                        const hasOrders = user.demandinvoice && user.demandinvoice.length > 0;
+                        matchesActivity = hasRequests && !hasOrders;
+                    }
+                    
+                    return matchesSearch && matchesRole && matchesActivity;
                 });
-            }, [users, searchTerm, filterRoleId]);
+            }, [users, searchTerm, filterRoleId, filterActivity]);
             
+            const getLastAction = (u) => {
+                let actions = [];
+                if (u.demandinvoice && u.demandinvoice.length > 0) {
+                    const lastOrder = [...u.demandinvoice].sort((a,b) => new Date(b.createdat) - new Date(a.createdat))[0];
+                    actions.push({ type: 'خرید', date: new Date(lastOrder.createdat) });
+                }
+                if (u.demand && u.demand.length > 0) {
+                    const lastReq = [...u.demand].sort((a,b) => new Date(b.createdat) - new Date(a.createdat))[0];
+                    actions.push({ type: 'تقاضا', date: new Date(lastReq.createdat) });
+                }
+                if (u.subscription_start_date) {
+                    actions.push({ type: 'اشتراک', date: new Date(u.subscription_start_date) });
+                }
+                
+                if (actions.length === 0) return '-';
+                
+                actions.sort((a,b) => b.date - a.date);
+                const latest = actions[0];
+                return `${latest.type} (${formatJalaali(latest.date)})`;
+            };
+
+            const getLastFollowup = (u) => {
+                if (!u.customer_followups || u.customer_followups.length === 0) return '-';
+                const lastFw = [...u.customer_followups].sort((a,b) => new Date(b.created_at) - new Date(a.created_at))[0];
+                return `${formatJalaali(lastFw.created_at)}`;
+            };
+
+            const handleExportExcel = () => {
+                if (filteredUsers.length === 0) {
+                    alert('کاربری برای خروجی یافت نشد.');
+                    return;
+                }
+
+                // Define headers
+                const headers = [
+                    'شناسه', 'نام کامل', 'نام کوچک', 'عنوان', 'شماره موبایل', 'ایمیل',
+                    'نقش', 'وضعیت', 'استان', 'شهر', 'آدرس دقیق', 'کد پستی',
+                    'طرح اشتراک', 'تاریخ شروع اشتراک', 'آخرین اکشن', 'آخرین پیگیری', 'تاریخ ثبت نام'
+                ];
+
+                // Map data
+                const csvRows = filteredUsers.map(u => {
+                    const loc = u.userlocation?.[0]?.location || {};
+                    const province = loc.city?.province?.title || '';
+                    const city = loc.city?.title || '';
+                    const address = loc.address || '';
+                    const postalcode = loc.postalcode || '';
+                    const plan = u.subscription_plan?.title || 'بدون اشتراک';
+                    const startDate = u.subscription_start_date ? formatJalaali(u.subscription_start_date) : '';
+                    const status = u.isdeleted ? 'غیرفعال' : 'فعال';
+                    const lastAction = getLastAction(u);
+                    const lastFw = getLastFollowup(u);
+                    const createdAt = u.createdat ? formatJalaali(u.createdat) : '';
+                    const prefixLabel = prefixMap[u.prefix] || '';
+
+                    // Escape quotes and wrap in quotes for CSV safety
+                    return [
+                        u.id, u.fullname || '', u.firstname || '', prefixLabel, u.mobile || '', u.email || '',
+                        u.role?.title || '', status, province, city, address, postalcode,
+                        plan, startDate, lastAction, lastFw, createdAt
+                    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+                });
+
+                const csvContent = [headers.join(','), ...csvRows].join('\n');
+                
+                // Add BOM for UTF-8 Excel compatibility
+                const bom = '\uFEFF';
+                const blob = new Blob([bom + csvContent], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                
+                const link = document.createElement('a');
+                link.href = url;
+                link.setAttribute('download', `bazaario_users_export_${new Date().getTime()}.csv`);
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            };
+
             return (
                 <div className="animate-fadeIn">
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">مدیریت کاربران</h1>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">لیست تمام کاربران و مدیریت دسترسی‌ها</p>
                         </div>
-                        <button onClick={() => handleOpenModal()} className="w-full md:w-auto text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 dark:bg-indigo-600 dark:hover:bg-indigo-700 focus:outline-none dark:focus:ring-indigo-800 transition-colors flex items-center justify-center gap-2" disabled={isLoading}>
-                            <i className="fa-solid fa-user-plus"></i> افزودن کاربر جدید
-                        </button>
+                        <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+                            <button onClick={handleExportExcel} className="w-full sm:w-auto text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 focus:ring-4 focus:ring-emerald-100 font-medium rounded-lg text-sm px-4 py-2.5 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/50 focus:outline-none transition-colors flex items-center justify-center gap-2" disabled={isLoading || filteredUsers.length === 0}>
+                                <i className="fa-solid fa-file-excel"></i> دانلود اکسل
+                            </button>
+                            <button onClick={() => handleOpenModal()} className="w-full sm:w-auto text-white bg-indigo-600 hover:bg-indigo-700 focus:ring-4 focus:ring-indigo-300 font-medium rounded-lg text-sm px-5 py-2.5 dark:bg-indigo-600 dark:hover:bg-indigo-700 focus:outline-none dark:focus:ring-indigo-800 transition-colors flex items-center justify-center gap-2" disabled={isLoading}>
+                                <i className="fa-solid fa-user-plus"></i> افزودن کاربر جدید
+                            </button>
+                        </div>
                     </div>
                     
                     <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -1275,6 +1555,18 @@
                                 ))}
                             </select>
                         </div>
+                        <div className="w-full md:w-64">
+                            <select
+                                value={filterActivity}
+                                onChange={(e) => setFilterActivity(e.target.value)}
+                                className="block w-full p-4 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-indigo-500 dark:focus:border-indigo-500"
+                            >
+                                <option value="all">همه فعالیت‌ها</option>
+                                <option value="subscribed">مشتریان اشتراکی</option>
+                                <option value="purchased">دارای خرید</option>
+                                <option value="requested">فقط ثبت تقاضا</option>
+                            </select>
+                        </div>
                     </div>
 
                     {/* Desktop Table View */}
@@ -1283,81 +1575,83 @@
                             <table className="w-full text-sm text-right text-gray-500 dark:text-gray-400">
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                                     <tr>
-                                        <th className="px-6 py-3">نام کامل</th>
-                                        <th className="px-6 py-3">نام کوچک</th>
-                                        <th className="px-6 py-3">عنوان</th>
-                                        <th className="px-6 py-3">شماره موبایل</th>
-                                        <th className="px-6 py-3 hidden sm:table-cell">موقعیت</th>
-                                        <th className="px-6 py-3">اشتراک</th>
-                                        <th className="px-6 py-3">نقش</th>
-                                        <th className="px-6 py-3">وضعیت</th>
-                                        <th className="px-6 py-3">عملیات</th>
+                                        <th className="px-4 py-3">کاربر</th>
+                                        <th className="px-4 py-3 hidden lg:table-cell">موقعیت</th>
+                                        <th className="px-4 py-3">اشتراک</th>
+                                        <th className="px-4 py-3 hidden md:table-cell">آخرین فعالیت‌ها</th>
+                                        <th className="px-4 py-3 text-center">وضعیت/نقش</th>
+                                        <th className="px-4 py-3 text-left">عملیات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {isLoading ? (
-                                        <tr><td colSpan="9" className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></td></tr>
+                                        <tr><td colSpan="6" className="text-center py-8"><div className="spinner mx-auto border-indigo-500"></div></td></tr>
                                     ) : filteredUsers.length === 0 ? (
-                                        <tr><td colSpan="9" className="text-center py-8 text-gray-500">هیچ کاربری یافت نشد.</td></tr>
+                                        <tr><td colSpan="6" className="text-center py-8 text-gray-500">هیچ کاربری یافت نشد.</td></tr>
                                     ) : (
                                         filteredUsers.map(user => {
                                             const province = user.userlocation[0]?.location?.city?.province?.title;
                                             const city = user.userlocation[0]?.location?.city?.title;
                                             const locationText = province && city ? `${province}، ${city}` : '-';
-                                            const firstName = user.firstname || '-';
+                                            const firstName = user.firstname || '';
 
                                             return (
                                                 <tr key={user.id} className={`bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 ${user.isdeleted ? 'opacity-60' : ''}`}>
-                                                    <td className="px-6 py-4 font-medium text-gray-900 whitespace-nowrap dark:text-white flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-xs">
-                                                            {user.fullname ? user.fullname.charAt(0) : '?'}
+                                                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap dark:text-white">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-9 h-9 rounded-full bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center text-indigo-600 dark:text-indigo-300 font-bold text-sm shrink-0">
+                                                                {user.fullname ? user.fullname.charAt(0) : '?'}
+                                                            </div>
+                                                            <div className="flex flex-col">
+                                                                <span className="font-bold">{user.fullname || '-'} {firstName ? `(${firstName})` : ''}</span>
+                                                                <span className="text-xs text-gray-500 font-mono mt-0.5">{user.mobile || '-'}</span>
+                                                            </div>
                                                         </div>
-                                                        {user.fullname || '-'}
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-gray-700 dark:text-gray-300 font-medium">
-                                                            {firstName}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="text-gray-700 dark:text-gray-300">
-                                                            {prefixMap[user.prefix] || '-'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4 font-mono">{user.mobile || '-'}</td>
-                                                    <td className="px-6 py-4 hidden sm:table-cell">{locationText}</td>
-                                                    <td className="px-6 py-4">
+                                                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{locationText}</td>
+                                                    <td className="px-4 py-3">
                                                         {user.subscription_plan ? (
                                                             <div className="flex flex-col gap-1">
-                                                                <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 whitespace-nowrap inline-flex items-center w-fit">
+                                                                <span className="bg-yellow-100 text-yellow-800 text-[11px] font-bold px-2 py-0.5 rounded border border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700 whitespace-nowrap inline-flex items-center w-fit">
                                                                     <i className="fa-solid fa-crown mr-1"></i> {user.subscription_plan.title}
                                                                 </span>
                                                                 {user.subscription_start_date && (
-                                                                    <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mt-1">
+                                                                    <span className="text-[10px] text-gray-500 dark:text-gray-400 whitespace-nowrap mt-0.5">
                                                                         شروع: {formatJalaali(user.subscription_start_date)}
                                                                     </span>
                                                                 )}
                                                             </div>
                                                         ) : (
-                                                            <span className="text-gray-400 dark:text-gray-500">-</span>
+                                                            <span className="text-gray-400 dark:text-gray-500 text-xs">-</span>
                                                         )}
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <span className="bg-indigo-100 text-indigo-800 text-xs font-medium px-2.5 py-0.5 rounded dark:bg-indigo-900 dark:text-indigo-300">
-                                                            {user.role?.title || 'Customer'}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex items-center">
-                                                            <div className={`h-2.5 w-2.5 rounded-full ml-2 ${user.isdeleted ? 'bg-red-500' : 'bg-green-500'}`}></div>
-                                                            {user.isdeleted ? 'غیرفعال' : 'فعال'}
+                                                    <td className="px-4 py-3 hidden md:table-cell">
+                                                        <div className="flex flex-col gap-1.5 text-[11px] text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                                            <span title="آخرین اکشن سیستم" className="flex items-center gap-1.5"><i className="fa-solid fa-bolt text-blue-500 w-3 text-center"></i> {getLastAction(user)}</span>
+                                                            <span title="آخرین پیگیری ثبت شده" className="flex items-center gap-1.5"><i className="fa-solid fa-headset text-teal-500 w-3 text-center"></i> {getLastFollowup(user)}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-4">
-                                                        <div className="flex gap-3">
-                                                            <button onClick={() => handleOpenModal(user)} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline">ویرایش</button>
-                                                            <button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className={`font-medium hover:underline ${user.isdeleted ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
-                                                                {user.isdeleted ? 'فعال‌سازی' : 'غیرفعال'}
+                                                    <td className="px-4 py-3 text-center">
+                                                        <div className="flex flex-col items-center gap-1.5">
+                                                            <span className="bg-indigo-50 text-indigo-700 text-[11px] font-bold px-2 py-0.5 rounded dark:bg-indigo-900/40 dark:text-indigo-300 whitespace-nowrap">
+                                                                {user.role?.title || 'Customer'}
+                                                            </span>
+                                                            <div className="flex items-center text-[10px] text-gray-500 dark:text-gray-400 font-medium">
+                                                                <div className={`h-2 w-2 rounded-full ml-1.5 ${user.isdeleted ? 'bg-red-500' : 'bg-green-500'}`}></div>
+                                                                {user.isdeleted ? 'غیرفعال' : 'فعال'}
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-left">
+                                                        <div className="flex gap-2 justify-end">
+                                                            <button onClick={() => handleOpenFollowup(user)} className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 flex items-center justify-center transition-colors" title="ثبت/مشاهده پیگیری">
+                                                                <i className="fa-solid fa-headset"></i>
+                                                            </button>
+                                                            <button onClick={() => handleOpenModal(user)} className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-400 flex items-center justify-center transition-colors" title="ویرایش کاربر">
+                                                                <i className="fa-regular fa-pen-to-square"></i>
+                                                            </button>
+                                                            <button onClick={() => handleDeleteRequest(user.id, user.isdeleted)} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${user.isdeleted ? 'bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-50 text-red-600 hover:bg-red-100 dark:bg-red-900/30 dark:text-red-400'}`} title={user.isdeleted ? 'فعال‌سازی مجدد' : 'غیرفعال کردن'}>
+                                                                <i className={`fa-solid ${user.isdeleted ? 'fa-check' : 'fa-ban'}`}></i>
                                                             </button>
                                                         </div>
                                                     </td>
@@ -1427,6 +1721,14 @@
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-bolt w-5 text-center text-blue-500"></i>
+                                                <span>اکشن: {getLastAction(user)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-headset w-5 text-center text-teal-500"></i>
+                                                <span>پیگیری: {getLastFollowup(user)}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                                 <i className="fa-solid fa-user-tag w-5 text-center text-gray-400"></i>
                                                 <span className="bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300 px-2 py-0.5 rounded text-xs">
                                                     {user.role?.title || 'Customer'}
@@ -1435,6 +1737,9 @@
                                         </div>
 
                                         <div className="flex gap-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                                            <button onClick={() => handleOpenFollowup(user)} className="flex-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/30 dark:hover:bg-blue-900/50 text-blue-700 dark:text-blue-300 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
+                                                <i className="fa-solid fa-headset"></i> پیگیری
+                                            </button>
                                             <button onClick={() => handleOpenModal(user)} className="flex-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/30 dark:hover:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2">
                                                 <i className="fa-regular fa-pen-to-square"></i> ویرایش
                                             </button>
@@ -1450,6 +1755,7 @@
                     </div>
 
                     {isModalOpen && <UserForm isOpen={isModalOpen} onClose={handleCloseModal} onSave={refreshAllData} user={editingUser} appData={appData} />}
+                    {isFollowupModalOpen && <FollowupModal isOpen={isFollowupModalOpen} onClose={handleCloseFollowup} user={followupUser} onSave={fetchUsers} />}
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={closeConfirmModal} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
                 </div>
             );
@@ -1468,12 +1774,10 @@
                 const fetchChurnData = async () => {
                     setIsLoading(true);
                     try {
-                        // Fetch current profiles to find active/expired statuses and fullnames for tooltip
                         const { data: profiles } = await supabaseClient
                             .from('profiles')
                             .select('id, fullname, subscription_plan_id, subscription_start_date, subscription_plan:subscription_plan_id(duration_days)');
                         
-                        // Fetch history for building cohorts
                         const { data: history } = await supabaseClient
                             .from('user_subscription_history')
                             .select('user_id, start_date, subscription_plan:subscription_plan_id(duration_days)');
@@ -1483,7 +1787,6 @@
                         const now = new Date();
                         const userNamesMap = {};
 
-                        // 1. Calculate Top Metrics & Build user names lookup
                         if (profiles) {
                             profiles.forEach(p => {
                                 userNamesMap[p.id] = p.fullname || 'کاربر نامشخص';
@@ -1499,7 +1802,6 @@
                             });
                         }
 
-                        // 2. Build Cohorts
                         const userHistories = {};
                         if (history) {
                             history.forEach(record => {
@@ -1524,7 +1826,6 @@
                             return `${monthNames[parseInt(m)-1]} ${y}`;
                         };
 
-                        // Determine the first subscription month (Cohort Month) for each user
                         Object.keys(userHistories).forEach(userId => {
                             const subs = userHistories[userId];
                             subs.sort((a, b) => a.startDate - b.startDate);
@@ -1540,7 +1841,6 @@
                         const currentJ = jalaali.toJalaali(now.getFullYear(), now.getMonth() + 1, now.getDate());
                         const currentTotalMonths = currentJ.jy * 12 + currentJ.jm;
 
-                        // Find the max dynamically needed columns
                         let maxCols = 0;
                         const sortedCohortKeys = Object.keys(cohorts).sort();
                         sortedCohortKeys.forEach(cohortStr => {
@@ -1550,12 +1850,9 @@
                             if (maxMonths > maxCols) maxCols = maxMonths;
                         });
                         
-                        // Limit to at least 5 months to look nice, maximum 12 months for UI limits
                         const displayColumnsCount = Math.min(Math.max(5, maxCols), 12);
-
                         const finalCohortData = [];
 
-                        // Calculate Retention for each cohort
                         sortedCohortKeys.forEach(cohortStr => {
                             const [cy, cm] = cohortStr.split('-').map(Number);
                             const cohortTotalMonths = cy * 12 + cm;
@@ -1566,7 +1863,6 @@
 
                             for (let i = 0; i <= Math.min(maxMonths, displayColumnsCount); i++) {
                                 if (i === 0) {
-                                    // For month 0, all initial users are active
                                     retention.push({
                                         percentage: 100,
                                         activeUsers: usersInCohort.map(id => userNamesMap[id] || 'کاربر نامشخص')
@@ -1591,7 +1887,7 @@
                                 usersInCohort.forEach(userId => {
                                     const subs = userHistories[userId];
                                     const isActive = subs.some(sub => {
-                                        return sub.startDate <= targetEnd && sub.endDate >= targetStart; // overlap check
+                                        return sub.startDate <= targetEnd && sub.endDate >= targetStart; 
                                     });
                                     if (isActive) {
                                         activeCount++;
@@ -1605,7 +1901,6 @@
                                 });
                             }
 
-                            // Pad future months with nulls dynamically
                             while (retention.length <= displayColumnsCount) {
                                 retention.push(null);
                             }
@@ -1617,7 +1912,6 @@
                             });
                         });
 
-                        // Calculate average churn rate (drop-off from month 0 to month 1)
                         let sumM1 = 0, countM1 = 0;
                         finalCohortData.forEach(c => {
                             if (c.retention[1] !== null) {
@@ -1629,7 +1923,7 @@
                         const avgChurn = countM1 > 0 ? (100 - avgRetM1).toFixed(1) : 0;
 
                         setMaxDisplayMonths(displayColumnsCount);
-                        setCohortData(finalCohortData.reverse()); // Show newest cohorts first
+                        setCohortData(finalCohortData.reverse()); 
                         setMetrics({ total: totalUsers, expired: expiredUsers, churnRate: avgChurn });
                     } catch (e) {
                         console.error("Error calculating churn data:", e);
@@ -1746,6 +2040,372 @@
                             )}
                         </div>
                     </div>
+                </div>
+            );
+        };
+
+        // ==================================================
+        // NEW: Subscriber Scoring (Health / RFM Model) Dashboard
+        // ==================================================
+        const SubscriberScoring = ({ appData }) => {
+            const [scores, setScores] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [showSqlModal, setShowSqlModal] = useState(false);
+            const [segmentsCount, setSegmentsCount] = useState({ power: 0, stable: 0, risk: 0, churn: 0 });
+
+            // Calculate actual Health Score based on demands and demand invoices
+            const calculateHealthScores = async () => {
+                setIsLoading(true);
+                try {
+                    const { data: profiles } = await supabaseClient
+                        .from('profiles')
+                        .select('id, fullname, mobile, subscription_plan_id'); // Ensure sub plan is fetched
+                        
+                    // Safe fetch for demand, demandinvoice and user_subscription_history tables
+                    let invoices = [];
+                    let demands = [];
+                    
+                    const invoicesRes = await supabaseClient.from('demandinvoice').select('customeruserid, createdat, totalamount');
+                    if (invoicesRes.data) invoices = invoicesRes.data;
+                    
+                    const demandsRes = await supabaseClient.from('demand').select('customeruserid, createdat');
+                    if (demandsRes.data) demands = demandsRes.data;
+
+                    const { data: historyRes } = await supabaseClient.from('user_subscription_history').select('user_id, start_date');
+                    const subHistory = historyRes || [];
+
+                    const now = new Date();
+                    const userStats = {};
+
+                    if (profiles) {
+                        profiles.forEach(p => {
+                            userStats[p.id] = {
+                                fullname: p.fullname || p.mobile,
+                                invoices: [],
+                                demands: [],
+                                subs: [],
+                                totalGmv: 0,
+                                isSubscriber: !!p.subscription_plan_id // Flat bonus indicator
+                            };
+                        });
+                    }
+                    
+                    invoices.forEach(inv => {
+                        if (userStats[inv.customeruserid]) {
+                            userStats[inv.customeruserid].invoices.push(inv);
+                            userStats[inv.customeruserid].totalGmv += Number(inv.totalamount || 0);
+                        }
+                    });
+                    
+                    demands.forEach(req => {
+                        if (userStats[req.customeruserid]) {
+                            userStats[req.customeruserid].demands.push(req);
+                        }
+                    });
+
+                    subHistory.forEach(sub => {
+                        if (userStats[sub.user_id]) {
+                            userStats[sub.user_id].subs.push(sub);
+                        }
+                    });
+
+                    // Calculate Monetary percentiles for relative scoring
+                    const gmvs = Object.values(userStats)
+                        .map(u => u.totalGmv)
+                        .filter(g => g > 0)
+                        .sort((a, b) => a - b);
+                    
+                    const getMScore = (gmv) => {
+                        if (gmv === 0) return 1;
+                        if (gmvs.length < 5) return 3; // Fallback if data is too small
+                        const p20 = gmvs[Math.floor(gmvs.length * 0.2)];
+                        const p40 = gmvs[Math.floor(gmvs.length * 0.4)];
+                        const p60 = gmvs[Math.floor(gmvs.length * 0.6)];
+                        const p80 = gmvs[Math.floor(gmvs.length * 0.8)];
+                        
+                        if (gmv >= p80) return 5;
+                        if (gmv >= p60) return 4;
+                        if (gmv >= p40) return 3;
+                        if (gmv >= p20) return 2;
+                        return 1;
+                    };
+
+                    const newScores = [];
+                    let cPower = 0, cStable = 0, cRisk = 0, cChurn = 0;
+
+                    Object.keys(userStats).forEach(userId => {
+                        const stats = userStats[userId];
+                        
+                        const invoiceCount = stats.invoices.length;
+                        const subCount = stats.subs.length;
+                        const demandCount = stats.demands.length;
+
+                        // Only consider users who have interacted (demands, invoices, or subscriptions)
+                        if (invoiceCount === 0 && demandCount === 0 && subCount === 0) return;
+
+                        // Frequency combines both Successful Purchases AND Subscription Renewals
+                        const frequencyCount = invoiceCount + subCount;
+                        
+                        let fScore = frequencyCount >= 10 ? 5 : (frequencyCount >= 5 ? 4 : (frequencyCount >= 3 ? 3 : (frequencyCount >= 1 ? 2 : 1)));
+
+                        let rScore = 1;
+                        let lastDates = [];
+                        
+                        if (invoiceCount > 0) lastDates.push(new Date(stats.invoices.sort((a,b)=>new Date(b.createdat)-new Date(a.createdat))[0].createdat));
+                        if (subCount > 0) lastDates.push(new Date(stats.subs.sort((a,b)=>new Date(b.start_date)-new Date(a.start_date))[0].start_date));
+                        
+                        // Only fallback to demand request date if they have NEVER purchased or subscribed
+                        if (demandCount > 0 && frequencyCount === 0) {
+                            lastDates.push(new Date(stats.demands.sort((a,b)=>new Date(b.createdat)-new Date(a.createdat))[0].createdat));
+                        }
+
+                        if (lastDates.length > 0) {
+                            lastDates.sort((a,b) => b - a); // descending
+                            const daysSince = (now - lastDates[0]) / (1000 * 60 * 60 * 24);
+                            
+                            // Recency scale
+                            if (daysSince <= 30) rScore = 5;
+                            else if (daysSince <= 60) rScore = 4;
+                            else if (daysSince <= 120) rScore = 3;
+                            else if (daysSince <= 180) rScore = 2;
+                            else rScore = 1;
+                        }
+
+                        let mScore = getMScore(stats.totalGmv);
+
+                        // Calculate total out of 100 based on weights (R: 30%, F: 30%, M: 30%, Active Sub: +10 flat bonus)
+                        let totalScore = Math.round(((rScore * 0.3) + (fScore * 0.3) + (mScore * 0.3)) * 20); 
+                        if (stats.isSubscriber) totalScore += 10;
+                        if (totalScore > 100) totalScore = 100;
+                        
+                        let segment = '';
+                        let badge = '';
+                        if (totalScore >= 80) { segment = 'وفادار (Power)'; badge = 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'; cPower++; }
+                        else if (totalScore >= 60) { segment = 'با ثبات (Stable)'; badge = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'; cStable++; }
+                        else if (totalScore >= 40) { segment = 'در معرض خطر (Risk)'; badge = 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400'; cRisk++; }
+                        else { segment = 'ریزش (Churn)'; badge = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'; cChurn++; }
+
+                        newScores.push({
+                            id: userId,
+                            fullname: stats.fullname,
+                            rScore, fScore, mScore, totalScore, segment, badge,
+                            historyCount: frequencyCount, // Show combined actions
+                            totalGmv: stats.totalGmv,
+                            isSubscriber: stats.isSubscriber
+                        });
+                    });
+
+                    // Sort by highest score
+                    newScores.sort((a,b) => b.totalScore - a.totalScore);
+                    setScores(newScores);
+                    setSegmentsCount({ power: cPower, stable: cStable, risk: cRisk, churn: cChurn });
+
+                } catch (error) {
+                    console.error("Error calculating health scores:", error);
+                }
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                calculateHealthScores();
+            }, []);
+
+            return (
+                <div className="animate-fadeIn space-y-6 relative">
+                    {isLoading && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl min-h-[400px]">
+                            <div className="spinner w-10 h-10 border-indigo-600"></div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">ارزش‌گذاری مشتریان (Subscriber Scoring)</h1>
+                            <p className="text-gray-500 dark:text-gray-400">تحلیل رفتار مشترکین بر اساس مدل ترکیبی RFM + Health Score با استفاده از تقاضاها، خریدها و تاریخچه اشتراک</p>
+                        </div>
+                        <button onClick={() => setShowSqlModal(true)} className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                            <i className="fa-solid fa-database text-yellow-400"></i>
+                            ساختار دیتابیس و الگوریتم
+                        </button>
+                    </div>
+
+                    {/* Segmentation Overview Cards */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border-l-4 border-green-500 shadow-sm flex flex-col">
+                            <span className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Power Subscribers</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">مشتریان وفادار و پرسود</span>
+                            <div className="mt-auto flex justify-between items-end">
+                                <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{segmentsCount.power}</h3>
+                                <i className="fa-solid fa-crown text-green-500 text-2xl opacity-80"></i>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border-l-4 border-blue-500 shadow-sm flex flex-col">
+                            <span className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Stable / Healthy</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">مشتریان فعال و با ثبات</span>
+                            <div className="mt-auto flex justify-between items-end">
+                                <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{segmentsCount.stable}</h3>
+                                <i className="fa-solid fa-thumbs-up text-blue-500 text-2xl opacity-80"></i>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border-l-4 border-orange-500 shadow-sm flex flex-col">
+                            <span className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">At Risk</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">کاهش فعالیت (نیاز به توجه)</span>
+                            <div className="mt-auto flex justify-between items-end">
+                                <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{segmentsCount.risk}</h3>
+                                <i className="fa-solid fa-triangle-exclamation text-orange-500 text-2xl opacity-80"></i>
+                            </div>
+                        </div>
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border-l-4 border-red-500 shadow-sm flex flex-col">
+                            <span className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-wider mb-1">Churn Risk</span>
+                            <span className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">احتمال بالای ریزش قطعی</span>
+                            <div className="mt-auto flex justify-between items-end">
+                                <h3 className="text-3xl font-bold text-gray-900 dark:text-white">{segmentsCount.churn}</h3>
+                                <i className="fa-solid fa-heart-crack text-red-500 text-2xl opacity-80"></i>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Detailed Scoring Table */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <i className="fa-solid fa-list-ol text-indigo-500"></i>
+                                جدول ارزش‌گذاری تفکیکی
+                            </h3>
+                            <div className="flex gap-2 text-xs text-gray-500 bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
+                                <span className="flex gap-1 items-center"><span className="w-2 h-2 rounded-full bg-indigo-500"></span> R: تازگی خرید/تمدید</span>
+                                <span className="flex gap-1 items-center"><span className="w-2 h-2 rounded-full bg-teal-500"></span> F: دفعات خرید/تمدید</span>
+                                <span className="flex gap-1 items-center"><span className="w-2 h-2 rounded-full bg-yellow-500"></span> M: حجم ارزش</span>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right text-gray-500 dark:text-gray-400">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                    <tr>
+                                        <th className="px-6 py-4">نام کاربر</th>
+                                        <th className="px-6 py-4 text-center">تعداد اکشن (خرید/تمدید)</th>
+                                        <th className="px-6 py-4 text-center">مجموع پرداختی (GMV)</th>
+                                        <th className="px-6 py-4 text-center">Recency (از 5)</th>
+                                        <th className="px-6 py-4 text-center">Frequency (از 5)</th>
+                                        <th className="px-6 py-4 text-center">Monetary (از 5)</th>
+                                        <th className="px-6 py-4 text-center">امتیاز کل (Score)</th>
+                                        <th className="px-6 py-4">سگمنت</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {scores.length === 0 && !isLoading ? (
+                                        <tr><td colSpan="8" className="text-center py-8">داده‌ای یافت نشد.</td></tr>
+                                    ) : (
+                                        scores.map(s => (
+                                            <tr key={s.id} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                                <td className="px-6 py-4 font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                                    {s.isSubscriber && <i className="fa-solid fa-crown text-yellow-500" title="اشتراک فعال (دارای +10 امتیاز تشویقی)"></i>}
+                                                    {s.fullname}
+                                                </td>
+                                                <td className="px-6 py-4 text-center font-mono">{s.historyCount}</td>
+                                                <td className="px-6 py-4 text-center font-mono text-xs">{s.totalGmv > 0 ? Number(s.totalGmv).toLocaleString('fa-IR') : '-'}</td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex justify-center gap-0.5" title="فاصله زمانی از آخرین خرید یا تمدید اشتراک">
+                                                        {[...Array(5)].map((_, i) => (
+                                                            <div key={i} className={`w-2 h-4 rounded-sm ${i < s.rScore ? 'bg-indigo-500' : 'bg-gray-200 dark:bg-gray-600'}`}></div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex justify-center gap-0.5" title="تعداد کل فاکتورها و تمدیدها">
+                                                        {[...Array(5)].map((_, i) => (
+                                                            <div key={i} className={`w-2 h-4 rounded-sm ${i < s.fScore ? 'bg-teal-500' : 'bg-gray-200 dark:bg-gray-600'}`}></div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <div className="flex justify-center gap-0.5" title="درک مالی بر اساس چارک‌بندی کل مشتریان">
+                                                        {[...Array(5)].map((_, i) => (
+                                                            <div key={i} className={`w-2 h-4 rounded-sm ${i < s.mScore ? 'bg-yellow-500' : 'bg-gray-200 dark:bg-gray-600'}`}></div>
+                                                        ))}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="text-lg font-black text-gray-800 dark:text-gray-100">{s.totalScore}</span>
+                                                    <span className="text-xs text-gray-400"> / 100</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold whitespace-nowrap ${s.badge}`}>
+                                                        {s.segment}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    {/* SQL Modal */}
+                    <Modal isOpen={showSqlModal} onClose={() => setShowSqlModal(false)} title="کد SQL برای ایجاد View امتیازدهی در Supabase" size="max-w-4xl">
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                                برای محاسبه زنده و بدون افت پرفورمنس در بک‌اند، بهتر است محاسبات RFM ترکیبی (خرید + اشتراک) را با استفاده از جداول <code>demandinvoice</code> و <code>user_subscription_history</code> در قالب یک <code>View</code> در دیتابیس Supabase ایجاد کنید.
+                            </p>
+                            <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto custom-scrollbar" dir="ltr">
+                                <pre className="text-green-400 font-mono text-sm leading-relaxed">
+{`-- 1. Create a View for User RFM Score (Orders + Subscriptions logic)
+CREATE OR REPLACE VIEW user_rfm_score AS
+WITH combined_actions AS (
+  -- All final invoices
+  SELECT customeruserid as user_id, createdat as action_date, totalamount as gmv 
+  FROM demandinvoice WHERE isdeleted = false
+  UNION ALL
+  -- All subscription starts/renewals (Count as frequency, 0 GMV for pure RFM calc, or join plan price if available)
+  SELECT user_id, start_date as action_date, 0 as gmv 
+  FROM user_subscription_history
+),
+user_stats AS (
+  SELECT 
+    user_id,
+    COUNT(*) as total_actions,
+    MAX(action_date) as last_action_date,
+    SUM(gmv) as total_gmv
+  FROM combined_actions
+  GROUP BY user_id
+)
+SELECT 
+  p.id as user_id,
+  p.fullname,
+  COALESCE(s.total_actions, 0) as total_actions,
+  s.last_action_date,
+  COALESCE(s.total_gmv, 0) as total_gmv,
+  p.subscription_plan_id IS NOT NULL as is_active_subscriber,
+  
+  -- Calculate R (Recency) Score [1-5]
+  CASE 
+    WHEN s.last_action_date IS NULL THEN 1
+    WHEN EXTRACT(DAY FROM (NOW() - s.last_action_date)) <= 30 THEN 5
+    WHEN EXTRACT(DAY FROM (NOW() - s.last_action_date)) <= 60 THEN 4
+    WHEN EXTRACT(DAY FROM (NOW() - s.last_action_date)) <= 120 THEN 3
+    WHEN EXTRACT(DAY FROM (NOW() - s.last_action_date)) <= 180 THEN 2
+    ELSE 1 
+  END as r_score,
+  
+  -- Calculate F (Frequency) Score [1-5]
+  CASE 
+    WHEN s.total_actions >= 10 THEN 5
+    WHEN s.total_actions >= 5 THEN 4
+    WHEN s.total_actions >= 3 THEN 3
+    WHEN s.total_actions >= 1 THEN 2
+    ELSE 1 
+  END as f_score
+
+FROM profiles p
+LEFT JOIN user_stats s ON p.id = s.user_id;
+
+-- 2. You can query this directly from your React app:
+-- const { data } = await supabase.from('user_rfm_score').select('*');`}
+                                </pre>
+                            </div>
+                        </div>
+                    </Modal>
                 </div>
             );
         };
@@ -2081,7 +2741,7 @@
                     setCategories(catRes.data || []);
                     setTypes(typeRes.data || []);
 
-                    // 2. Fetch Warehouses dynamically (Only locations that exist in supplierstock)
+                    // 2. Fetch Warehouses dynamically
                     const { data: stockData } = await supabaseClient.from('supplierstock').select('location_id');
                     let uniqueLocIds = [];
                     if (stockData) {
@@ -2139,10 +2799,8 @@
                 
                 try {
                     if (!val || val === '0' || val === '') {
-                        // Delete if empty or 0
                         await supabaseClient.from('location_attribute_value').delete().match({ location_id: locId, attribute_id: discountAttrId });
                     } else {
-                        // Upsert logic (Check if exists, then update or insert)
                         const { data } = await supabaseClient.from('location_attribute_value')
                             .select('id')
                             .match({ location_id: locId, attribute_id: discountAttrId })
@@ -2291,8 +2949,8 @@
         // Main App Component
         // ==================================================
         const App = () => {
-            const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light'); // Default to light for better visibility first
-            const [currentPage, setCurrentPage] = useState('users');
+            const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+            const [currentPage, setCurrentPage] = useState('users'); // Changed default to user management
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
             const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [], subscriptionPlans: [] });
             const [isLoading, setIsLoading] = useState(true);
@@ -2306,7 +2964,7 @@
                         supabaseClient.from('marketingchannel').select('*').order('title'),
                         supabaseClient.from('shippingcompany').select('*').order('title'),
                         supabaseClient.from('location_attribute_key').select('*').order('title'),
-                        supabaseClient.from('subscription_plan').select('*').order('title') // Changed to new table
+                        supabaseClient.from('subscription_plan').select('*').order('title')
                     ]);
                     
                     setAppData({
@@ -2348,6 +3006,7 @@
                     case 'subscriptions': return <SubscriptionSettings appData={appData} fetchData={fetchAppData} />;
                     case 'settings': return <SettingsManagement appData={appData} fetchData={fetchAppData} />;
                     case 'churn': return <ChurnAnalysis appData={appData} />;
+                    case 'scoring': return <SubscriberScoring appData={appData} />;
                     default: return <UserManagement appData={appData} fetchData={fetchAppData} />;
                 }
             };
@@ -2373,8 +3032,9 @@
                     <nav className="flex-1 p-4">
                         <ul className="space-y-2">
                             <NavItem page="users" icon="fa-users">مدیریت کاربران</NavItem>
+                            <NavItem page="scoring" icon="fa-heart-pulse">ارزش‌گذاری مشتریان</NavItem>
+                            <NavItem page="churn" icon="fa-chart-line">تحلیل ریزش (Churn)</NavItem>
                             <NavItem page="subscriptions" icon="fa-crown">تنظیمات اشتراک‌</NavItem>
-                            <NavItem page="churn" icon="fa-chart-line">تحلیل ریزش</NavItem>
                             <NavItem page="settings" icon="fa-sliders">تنظیمات فرم‌ها</NavItem>
                         </ul>
                     </nav>
