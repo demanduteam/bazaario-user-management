@@ -1424,6 +1424,7 @@
                 return users.filter(user => {
                     const matchesSearch = !lowerCaseSearch || 
                         (user.fullname && user.fullname.toLowerCase().includes(lowerCaseSearch)) ||
+                        (user.firstname && user.firstname.toLowerCase().includes(lowerCaseSearch)) ||
                         (user.mobile && user.mobile.includes(lowerCaseSearch));
                     
                     const matchesRole = !filterRoleId || (user.role && String(user.role.id) === String(filterRoleId));
@@ -1545,7 +1546,7 @@
                             </div>
                             <input
                                 type="text"
-                                placeholder="جستجو بر اساس نام یا شماره موبایل..."
+                                placeholder="جستجو بر اساس نام، نام کوچک یا شماره موبایل..."
                                 className="block w-full p-4 pl-10 text-sm text-gray-900 border border-gray-300 rounded-lg bg-white focus:ring-indigo-500 focus:border-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:placeholder-gray-400 dark:text-white dark:focus:ring-indigo-500 dark:focus:border-indigo-500"
                                 value={searchTerm}
                                 onChange={e => setSearchTerm(e.target.value)}
