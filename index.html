@@ -754,10 +754,11 @@
         // User Form & Management Components
         // ==================================================
         const UserForm = ({ isOpen, onClose, onSave, user, appData }) => {
-            const { roles, provinces, marketingChannels, shippingCompanies } = appData;
+            const { roles, provinces, marketingChannels, shippingCompanies, subscriptionPlans } = appData;
             
             const initialFormData = {
-                fullname: '', firstname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: '', prefix: ''
+                fullname: '', firstname: '', email: '', mobile: '', emergencyphonenumber: '', roleid: '', marketingchannelid: '', prefix: '',
+                subscription_plan_id: '', subscription_start_date: ''
             };
             const [formData, setFormData] = useState(initialFormData);
             const [isChecking, setIsChecking] = useState(false);
@@ -810,7 +811,9 @@
                             mobile: user.mobile || '',
                             emergencyphonenumber: user.emergencyphonenumber || '',
                             roleid: user.role?.id || '',
-                            marketingchannelid: user.marketingchannelid || ''
+                            marketingchannelid: user.marketingchannelid || '',
+                            subscription_plan_id: user.subscription_plan_id || '',
+                            subscription_start_date: user.subscription_start_date ? user.subscription_start_date.split('T')[0] : ''
                         });
                         setExistingUser(user);
                         fetchUserLocations(user.id);
@@ -841,7 +844,9 @@
                             email: data.email?.endsWith('@placeholder.email') ? '' : data.email || '',
                             emergencyphonenumber: data.emergencyphonenumber || '',
                             roleid: data.role?.id || customerRoleId,
-                            marketingchannelid: data.marketingchannelid || ''
+                            marketingchannelid: data.marketingchannelid || '',
+                            subscription_plan_id: data.subscription_plan_id || '',
+                            subscription_start_date: data.subscription_start_date ? data.subscription_start_date.split('T')[0] : ''
                         }));
                         setExistingUser(data);
                         fetchUserLocations(data.id);
@@ -882,7 +887,9 @@
                         email: formData.email || `${formData.mobile}@placeholder.email`,
                         emergencyphonenumber: formData.emergencyphonenumber || null,
                         roleid: formData.roleid,
-                        marketingchannelid: formData.marketingchannelid || null
+                        marketingchannelid: formData.marketingchannelid || null,
+                        subscription_plan_id: formData.subscription_plan_id || null,
+                        subscription_start_date: formData.subscription_start_date || null
                     };
 
                     if (existingUser) { // UPDATE USER
@@ -891,6 +898,16 @@
                             .update(profileData)
                             .eq('id', existingUser.id);
                         if (profileError) throw profileError;
+                        
+                        // Handle Subscription History Logic if plan changed
+                        if (formData.subscription_plan_id && (!existingUser.subscription_plan_id || existingUser.subscription_plan_id !== formData.subscription_plan_id || existingUser.subscription_start_date !== formData.subscription_start_date)) {
+                            await supabaseClient.from('user_subscription_history').insert({
+                                user_id: existingUser.id,
+                                subscription_plan_id: formData.subscription_plan_id,
+                                start_date: formData.subscription_start_date || new Date().toISOString(),
+                                paid_amount: 0 // Optional logic for payment amount
+                            });
+                        }
 
                         onSave();
                         onClose();
@@ -908,6 +925,16 @@
                                 .update({ ...profileData, mobile: formData.mobile })
                                 .eq('id', authData.user.id);
                             if (profileError) throw profileError;
+                            
+                            // Log history for new user if subscription assigned
+                            if (formData.subscription_plan_id) {
+                                await supabaseClient.from('user_subscription_history').insert({
+                                    user_id: authData.user.id,
+                                    subscription_plan_id: formData.subscription_plan_id,
+                                    start_date: formData.subscription_start_date || new Date().toISOString(),
+                                    paid_amount: 0
+                                });
+                            }
 
                             for (const addr of newAddresses) {
                                 const locationFields = {
@@ -962,38 +989,42 @@
                 onSave();
             };
 
-            const isBannerActive = existingUser && existingUser.subscription_plan ? isSubscriptionActive(existingUser.subscription_start_date, existingUser.subscription_plan.duration_days) : false;
+            const isBannerActive = formData.subscription_plan_id && formData.subscription_start_date ? 
+                isSubscriptionActive(formData.subscription_start_date, subscriptionPlans.find(p=>p.id === formData.subscription_plan_id)?.duration_days) : false;
 
             return (
                 <Modal isOpen={isOpen} onClose={onClose} title={user ? 'ویرایش کاربر' : 'افزودن کاربر جدید'}>
                     <form onSubmit={handleSubmit} className="space-y-4">
                         
-                        {/* Read-Only Subscription Status Banner for Editing */}
-                        {existingUser && (
-                            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-800 flex items-center justify-center text-indigo-600 dark:text-indigo-300 shrink-0">
-                                        <i className="fa-solid fa-crown text-lg"></i>
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-bold text-gray-800 dark:text-gray-200 flex items-center gap-2">
-                                            وضعیت اشتراک: {existingUser.subscription_plan?.title || 'بدون اشتراک فعال'}
-                                            {existingUser.subscription_plan && (
-                                                <span className={`px-2 py-0.5 rounded text-[10px] ${isBannerActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
-                                                    {isBannerActive ? 'فعال' : 'پایان یافته'}
-                                                </span>
-                                            )}
-                                        </p>
-                                        {existingUser.subscription_start_date && (
-                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">تاریخ شروع: {formatJalaali(existingUser.subscription_start_date)}</p>
-                                        )}
-                                    </div>
+                        {/* Editable Subscription Allocation */}
+                        <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-800 mb-6">
+                            <div className="flex justify-between items-center mb-3">
+                                <h4 className="font-bold text-yellow-800 dark:text-yellow-400 flex items-center gap-2">
+                                    <i className="fa-solid fa-crown"></i> تخصیص اشتراک
+                                </h4>
+                                {formData.subscription_plan_id && formData.subscription_start_date && (
+                                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${isBannerActive ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                        {isBannerActive ? 'اشتراک فعال' : 'پایان یافته'}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-yellow-900 dark:text-yellow-300">طرح اشتراک</label>
+                                    <select name="subscription_plan_id" value={formData.subscription_plan_id} onChange={handleChange} className="bg-white dark:bg-gray-800 border border-yellow-300 dark:border-yellow-700 text-gray-900 dark:text-white text-sm rounded-lg focus:ring-yellow-500 focus:border-yellow-500 block w-full p-2.5">
+                                        <option value="">بدون اشتراک</option>
+                                        {subscriptionPlans?.map(plan => <option key={plan.id} value={plan.id}>{plan.title} ({plan.duration_days} روز)</option>)}
+                                    </select>
                                 </div>
-                                <div className="text-xs text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-3 py-1.5 rounded-lg flex items-center gap-1 hidden sm:flex">
-                                    <i className="fa-solid fa-circle-info"></i> تخصیص در تنظیمات اشتراک
+                                <div>
+                                    <label className="block mb-2 text-sm font-medium text-yellow-900 dark:text-yellow-300">تاریخ شروع اعتبار</label>
+                                    <JalaliDatePicker 
+                                        value={formData.subscription_start_date} 
+                                        onChange={(val) => handleChange({ target: { name: 'subscription_start_date', value: val } })} 
+                                    />
                                 </div>
                             </div>
-                        )}
+                        </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Left Column */}
@@ -3284,6 +3315,311 @@ GROUP BY agent_id;`}
                             {warehouses.length === 0 && <p className="text-center text-sm text-gray-400 mt-10">انباری در سیستم ثبت نشده است.</p>}
                         </div>
                     </div>
+                </div>
+            );
+        };
+
+        // ==================================================
+        // NEW: Subscription Assignment Dashboard
+        // ==================================================
+        const SubscriptionAssignment = ({ appData, onSave }) => {
+            const [formData, setFormData] = useState({
+                start_date: new Date().toISOString().split('T')[0],
+                plan_id: '',
+                user_id: '',
+                paid_amount: ''
+            });
+            const [history, setHistory] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [searchTerm, setSearchTerm] = useState('');
+
+            const userOptions = useMemo(() => {
+                return appData.users.map(u => ({
+                    id: u.id,
+                    title: u.fullname || 'بدون نام',
+                    subtitle: u.mobile || '-'
+                }));
+            }, [appData.users]);
+
+            const fetchHistory = async () => {
+                setIsLoading(true);
+                const { data, error } = await supabaseClient
+                    .from('user_subscription_history')
+                    .select('*, profiles:user_id(fullname, mobile), subscription_plan:subscription_plan_id(title, duration_days)')
+                    .order('created_at', { ascending: false });
+                if (!error && data) {
+                    setHistory(data);
+                }
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                fetchHistory();
+            }, []);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (!formData.user_id || !formData.plan_id || !formData.start_date) {
+                    alert('لطفا فیلدهای اجباری را پر کنید.');
+                    return;
+                }
+                setIsLoading(true);
+
+                // Update user profile
+                const { error: profileError } = await supabaseClient
+                    .from('profiles')
+                    .update({ 
+                        subscription_plan_id: formData.plan_id, 
+                        subscription_start_date: formData.start_date 
+                    })
+                    .eq('id', formData.user_id);
+
+                if (profileError) {
+                    alert('خطا در بروزرسانی پروفایل: ' + profileError.message);
+                    setIsLoading(false);
+                    return;
+                }
+
+                // Insert into history
+                const { error: historyError } = await supabaseClient
+                    .from('user_subscription_history')
+                    .insert({
+                        user_id: formData.user_id,
+                        subscription_plan_id: formData.plan_id,
+                        start_date: formData.start_date,
+                        paid_amount: formData.paid_amount ? parseInt(formData.paid_amount.replace(/,/g, '')) : 0
+                    });
+
+                if (historyError) {
+                    alert('خطا در ثبت تاریخچه: ' + historyError.message);
+                } else {
+                    setFormData({ ...formData, plan_id: '', user_id: '', paid_amount: '' });
+                    fetchHistory();
+                    if (onSave) onSave();
+                }
+                setIsLoading(false);
+            };
+
+            const handleAmountChange = (e) => {
+                const rawValue = e.target.value.replace(/,/g, '').replace(/\D/g, '');
+                const formatted = rawValue ? parseInt(rawValue).toLocaleString('en-US') : '';
+                setFormData(prev => ({ ...prev, paid_amount: formatted }));
+            };
+
+            const filteredHistory = history.filter(item => {
+                if (!searchTerm) return true;
+                const term = searchTerm.toLowerCase();
+                return (
+                    (item.profiles?.fullname || '').toLowerCase().includes(term) ||
+                    (item.profiles?.mobile || '').includes(term) ||
+                    (item.subscription_plan?.title || '').toLowerCase().includes(term)
+                );
+            });
+
+            const StepNumber = ({ num }) => (
+                <span className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/50 dark:text-indigo-400 flex items-center justify-center text-xs font-bold shrink-0">
+                    {num}
+                </span>
+            );
+
+            return (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-8">
+                    {/* Right side in RTL (Form) */}
+                    <div className="lg:col-span-5 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col overflow-hidden h-fit">
+                        <div className="bg-indigo-600 text-white p-4 flex justify-between items-center">
+                            <h3 className="font-bold text-lg flex items-center gap-2">
+                                <i className="fa-solid fa-plus-circle"></i> فرم ثبت اشتراک جدید
+                            </h3>
+                        </div>
+                        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+                            {/* Step 1 */}
+                            <div>
+                                <label className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 mb-3">
+                                    <StepNumber num="۱" /> تاریخ شروع اشتراک
+                                </label>
+                                <JalaliDatePicker 
+                                    value={formData.start_date} 
+                                    onChange={(val) => setFormData(prev => ({ ...prev, start_date: val }))} 
+                                />
+                                <div className="text-[10px] text-gray-400 mt-2 flex items-center gap-1 font-mono text-right" dir="ltr">
+                                    <i className="fa-solid fa-server"></i> خروجی میلادی جهت سرور: {formData.start_date}
+                                </div>
+                            </div>
+
+                            {/* Step 2 */}
+                            <div>
+                                <label className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 mb-3">
+                                    <StepNumber num="۲" /> انتخاب طرح اشتراک
+                                </label>
+                                <div className="relative">
+                                    <select 
+                                        value={formData.plan_id} 
+                                        onChange={(e) => setFormData(prev => ({ ...prev, plan_id: e.target.value }))}
+                                        className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-3.5 outline-none appearance-none font-medium"
+                                    >
+                                        <option value="">طرح مورد نظر را انتخاب کنید...</option>
+                                        {appData.subscriptionPlans.map(plan => (
+                                            <option key={plan.id} value={plan.id}>{plan.title} ({plan.duration_days} روز)</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                                        <i className="fa-solid fa-chevron-down text-gray-400"></i>
+                                    </div>
+                                    <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                                        <i className="fa-solid fa-crown text-yellow-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Step 3 */}
+                            <div className="relative z-20">
+                                <label className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 mb-3">
+                                    <StepNumber num="۳" /> کاربر دریافت‌کننده
+                                </label>
+                                <SearchableSelect
+                                    options={userOptions}
+                                    value={formData.user_id}
+                                    onChange={(id) => setFormData(prev => ({ ...prev, user_id: id }))}
+                                    placeholder="جستجوی نام یا شماره موبایل کاربر..."
+                                />
+                            </div>
+
+                            {/* Step 4 */}
+                            <div>
+                                <label className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 mb-3">
+                                    <StepNumber num="۴" /> مبلغ دریافتی از مشتری <span className="text-xs text-gray-400 font-normal">(اختیاری)</span>
+                                </label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        value={formData.paid_amount}
+                                        onChange={handleAmountChange}
+                                        placeholder="مثلاً: 500,000"
+                                        className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-3.5 pl-16 pr-12 outline-none font-bold"
+                                        dir="ltr"
+                                    />
+                                    <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                                        <span className="text-gray-500 text-sm">تومان</span>
+                                    </div>
+                                    <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none">
+                                        <i className="fa-solid fa-money-bill-wave text-green-500"></i>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="submit" disabled={isLoading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl py-4 transition-colors flex justify-center items-center gap-2 shadow-lg shadow-indigo-600/30">
+                                {isLoading ? <div className="spinner spinner-white w-5 h-5"></div> : 'ثبت اشتراک'}
+                            </button>
+                        </form>
+                    </div>
+
+                    {/* Left side in RTL (History List) */}
+                    <div className="lg:col-span-7 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-[650px]">
+                        <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <h3 className="font-bold text-gray-800 dark:text-white flex items-center gap-2 text-lg">
+                                <i className="fa-solid fa-clock-rotate-left text-gray-400"></i> تاریخچه کامل اشتراک‌ها
+                            </h3>
+                            <div className="relative w-full sm:w-64">
+                                <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                                <input 
+                                    type="text" 
+                                    placeholder="جستجو مشتری یا طرح..." 
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm rounded-xl focus:ring-indigo-500 focus:border-indigo-500 block p-2.5 pl-9 outline-none"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-auto custom-scrollbar">
+                            {isLoading && history.length === 0 ? (
+                                <div className="flex justify-center items-center h-full">
+                                    <div className="spinner w-8 h-8 border-indigo-500"></div>
+                                </div>
+                            ) : filteredHistory.length === 0 ? (
+                                <div className="text-center py-10 text-gray-500">موردی یافت نشد.</div>
+                            ) : (
+                                <table className="w-full text-sm text-center text-gray-500 dark:text-gray-400">
+                                    <thead className="text-xs text-gray-500 bg-gray-50 dark:bg-gray-700/50 sticky top-0 z-10 shadow-sm border-b border-gray-200 dark:border-gray-700">
+                                        <tr>
+                                            <th className="px-4 py-3 font-medium">کاربر</th>
+                                            <th className="px-4 py-3 font-medium">طرح</th>
+                                            <th className="px-4 py-3 font-medium">مبلغ دریافتی</th>
+                                            <th className="px-4 py-3 font-medium">تاریخ شروع</th>
+                                            <th className="px-4 py-3 font-medium">زمان ثبت</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                        {filteredHistory.map(item => {
+                                            const isActive = isSubscriptionActive(item.start_date, item.subscription_plan?.duration_days);
+                                            const createdAtDate = new Date(item.created_at);
+                                            return (
+                                                <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors">
+                                                    <td className="px-4 py-4 text-right">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-gray-800 dark:text-gray-200">{item.profiles?.fullname || 'نامشخص'}</span>
+                                                            <span className="text-xs text-gray-500 font-mono mt-0.5" dir="ltr">{item.profiles?.mobile}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="text-yellow-700 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-300 px-2 py-0.5 rounded text-xs font-bold whitespace-nowrap mb-1 flex items-center gap-1">
+                                                                <i className="fa-solid fa-crown text-[10px]"></i> {item.subscription_plan?.title}
+                                                            </span>
+                                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
+                                                                {isActive ? 'فعال' : 'پایان یافته'}
+                                                            </span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex flex-col items-center justify-center">
+                                                            <span className="font-bold text-green-600 dark:text-green-400 text-base">{item.paid_amount > 0 ? item.paid_amount.toLocaleString('en-US') : '0'}</span>
+                                                            <span className="text-[10px] text-gray-400">تومان</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4 font-bold text-gray-700 dark:text-gray-300">
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            {formatJalaali(item.start_date)} <i className="fa-regular fa-calendar-check text-green-500"></i>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-4 py-4">
+                                                        <div className="flex flex-col items-center text-xs text-gray-400">
+                                                            <span>{formatJalaali(item.created_at)}</span>
+                                                            <span dir="ltr">{createdAtDate.getHours().toString().padStart(2, '0')}:{createdAtDate.getMinutes().toString().padStart(2, '0')}</span>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })}
+                                    </tbody>
+                                </table>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Added this component to avoid crash on Subscription Settings tab
+        const SubscriptionSettings = ({ appData, fetchData }) => {
+            const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
+            return (
+                <div className="animate-fadeIn">
+                    <div className="mb-6">
+                        <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">تنظیمات اشتراک‌ها</h1>
+                        <p className="text-gray-500 dark:text-gray-400">مدیریت طرح‌ها، تعیین مدت زمان اعتبار و واگذاری اشتراک به مشتریان</p>
+                    </div>
+
+                    <SubscriptionAssignment appData={appData} onSave={fetchData} />
+
+                    <div className="space-y-6">
+                        <SubscriptionPlanManager
+                            onSave={fetchData}
+                            items={appData.subscriptionPlans}
+                            confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
+                        />
+                        <SubscriptionRulesManager appData={appData} />
+                    </div>
+                    <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
                 </div>
             );
         };
