@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bazaario - Standalone User Management</title>
+    <title>Bazaario - Standalone User Management & CRM</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -127,17 +127,15 @@
             }
         };
 
-        // CHECK SUBSCRIPTION STATUS
         const isSubscriptionActive = (startDate, durationDays) => {
             if (!startDate || !durationDays) return false;
             const start = new Date(startDate);
-            start.setHours(0, 0, 0, 0); // Start of the day
+            start.setHours(0, 0, 0, 0);
             const end = new Date(start.getTime() + (durationDays * 24 * 60 * 60 * 1000));
-            end.setHours(23, 59, 59, 999); // End of the expiration day
+            end.setHours(23, 59, 59, 999);
             return end >= new Date();
         };
 
-        // --- Custom Jalali Date Picker (No External UI Dependencies) ---
         const JalaliDatePicker = ({ value, onChange }) => {
             const [jy, setJy] = useState('');
             const [jm, setJm] = useState('');
@@ -1209,18 +1207,21 @@
         };
 
         // ==================================================
-        // Customer Followup Component
+        // Customer Followup Component (Updated with Assigned To)
         // ==================================================
-        const FollowupModal = ({ isOpen, onClose, user, onSave }) => {
+        const FollowupModal = ({ isOpen, onClose, user, onSave, appData }) => {
             const [followups, setFollowups] = useState([]);
             const [isLoading, setIsLoading] = useState(true);
             const [isSubmitting, setIsSubmitting] = useState(false);
+            const [agents, setAgents] = useState([]);
+            
             const [formData, setFormData] = useState({
-                action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending'
+                action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending', assigned_to: ''
             });
 
             const fetchFollowups = async () => {
                 setIsLoading(true);
+                // Removed the assignee relation query since assigned_to is now just a TEXT column
                 const { data } = await supabaseClient
                     .from('customer_followups')
                     .select('*')
@@ -1230,10 +1231,21 @@
                 setIsLoading(false);
             };
 
+            const fetchAgents = async () => {
+                // Hardcoded agents for MVP
+                setAgents([
+                    { id: 'رویا', fullname: 'رویا' },
+                    { id: 'سعیده', fullname: 'سعیده' },
+                    { id: 'الهام', fullname: 'الهام' },
+                    { id: 'احمد', fullname: 'احمد' }
+                ]);
+            };
+
             useEffect(() => {
                 if (isOpen && user) {
                     fetchFollowups();
-                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending' });
+                    fetchAgents();
+                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending', assigned_to: '' });
                 }
             }, [isOpen, user]);
 
@@ -1241,7 +1253,7 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
-                if (isSubmitting) return; // جلوگیری از اجرای مجدد در صورت دابل-کلیک سریع
+                if (isSubmitting) return;
 
                 setIsSubmitting(true);
                 
@@ -1251,7 +1263,8 @@
                         action_taken: formData.action_taken || null,
                         notes: formData.notes || null,
                         next_action_notes: formData.next_action_notes || null,
-                        status: formData.status
+                        status: formData.status,
+                        assigned_to: formData.assigned_to || null
                     };
                     
                     if (formData.next_action_date) {
@@ -1261,14 +1274,13 @@
                     const { error } = await supabaseClient.from('customer_followups').insert(payload);
                     if (error) throw error;
                     
-                    // خالی کردن فرم برای جلوگیری از ثبت مجدد تصادفی همان داده‌ها
-                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending' });
+                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending', assigned_to: '' });
                     
                     fetchFollowups();
                     if(onSave) onSave();
                 } catch (error) {
                     console.error("Error submitting followup:", error);
-                    alert("خطا در ثبت پیگیری. لطفاً وضعیت اینترنت خود را بررسی کنید.");
+                    alert("خطا در ثبت پیگیری. لطفاً وضعیت ستون assigned_to را در دیتابیس بررسی کنید.");
                 } finally {
                     setIsSubmitting(false);
                 }
@@ -1284,9 +1296,9 @@
             };
 
             return (
-                <Modal isOpen={isOpen} onClose={onClose} title={`پیگیری مشتری: ${user?.fullname || user?.mobile}`} size="max-w-5xl">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="lg:col-span-1 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 h-fit">
+                <Modal isOpen={isOpen} onClose={onClose} title={`پیگیری مشتری: ${user?.fullname || user?.mobile}`} size="max-w-6xl">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                        <div className="lg:col-span-5 bg-gray-50 dark:bg-gray-700/30 p-5 rounded-xl border border-gray-200 dark:border-gray-700 h-fit">
                             <h3 className="font-bold mb-4 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-600 pb-2">ثبت پیگیری جدید</h3>
                             <form onSubmit={handleSubmit} className="space-y-4">
                                 <div>
@@ -1305,6 +1317,15 @@
                                             value={formData.next_action_date} 
                                             onChange={(val) => handleChange({ target: { name: 'next_action_date', value: val } })} 
                                         />
+                                    </div>
+                                    <div className="mb-3">
+                                        <label className="block text-xs text-gray-500 mb-1"> کارمند پیگیری‌کننده </label>
+                                        <select name="assigned_to" value={formData.assigned_to} onChange={handleChange} className="w-full bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-2 text-sm">
+                                            <option value="">بدون ارجاع (شخصی)</option>
+                                            {agents.map(agent => (
+                                                <option key={agent.id} value={agent.id}>{agent.fullname || agent.mobile}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <div>
                                         <label className="block text-xs text-gray-500 mb-1">یادداشت اقدام بعدی</label>
@@ -1325,20 +1346,23 @@
                             </form>
                         </div>
                         
-                        <div className="lg:col-span-2">
+                        <div className="lg:col-span-7">
                             <h3 className="font-bold mb-4 text-gray-800 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-2">تاریخچه ارتباطات</h3>
                             {isLoading ? (
                                 <div className="flex justify-center py-10"><div className="spinner w-8 h-8 border-indigo-500"></div></div>
                             ) : followups.length === 0 ? (
                                 <div className="text-center text-gray-500 py-10 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-300 dark:border-gray-700">هیچ سابقه پیگیری ثبت نشده است.</div>
                             ) : (
-                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                                <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-2 custom-scrollbar">
                                     {followups.map(fw => (
                                         <div key={fw.id} className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 relative">
                                             <div className="flex justify-between items-start mb-2">
-                                                <h4 className="font-bold text-indigo-600 dark:text-indigo-400 text-sm flex items-center gap-2">
-                                                    <i className="fa-solid fa-comment-dots"></i> {fw.action_taken || 'اقدام نامشخص'}
-                                                </h4>
+                                                <div>
+                                                    <h4 className="font-bold text-indigo-600 dark:text-indigo-400 text-sm flex items-center gap-2">
+                                                        <i className="fa-solid fa-comment-dots"></i> {fw.action_taken || 'اقدام نامشخص'}
+                                                    </h4>
+                                                    {fw.assigned_to && <p className="text-xs text-gray-500 mt-1"><i className="fa-solid fa-user-tag text-gray-400"></i> مسئول: {fw.assigned_to}</p>}
+                                                </div>
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className="text-xs text-gray-400" dir="ltr">{new Date(fw.created_at).toLocaleString('fa-IR')}</span>
                                                     {getStatusLabel(fw.status)}
@@ -1388,6 +1412,7 @@
             const fetchUsers = async () => {
                 setIsLoading(true);
                 
+                // Removed the assigned relation from customer_followups here as well
                 let { data, error } = await supabaseClient.from('profiles').select(`
                     *, 
                     role(id, title), 
@@ -1816,7 +1841,7 @@
                     </div>
 
                     {isModalOpen && <UserForm isOpen={isModalOpen} onClose={handleCloseModal} onSave={refreshAllData} user={editingUser} appData={appData} />}
-                    {isFollowupModalOpen && <FollowupModal isOpen={isFollowupModalOpen} onClose={handleCloseFollowup} user={followupUser} onSave={fetchUsers} />}
+                    {isFollowupModalOpen && <FollowupModal isOpen={isFollowupModalOpen} onClose={handleCloseFollowup} user={followupUser} onSave={fetchUsers} appData={appData} />}
                     <ConfirmModal isOpen={confirmState.isOpen} onClose={closeConfirmModal} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
                 </div>
             );
@@ -2480,6 +2505,289 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
         };
 
         // ==================================================
+        // NEW: Follow-up Dashboard & ROI Component
+        // ==================================================
+        const FollowupDashboard = ({ appData }) => {
+            const [followups, setFollowups] = useState([]);
+            const [agentRoi, setAgentRoi] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const [showSqlModal, setShowSqlModal] = useState(false);
+
+            const fetchData = async () => {
+                setIsLoading(true);
+                try {
+                    // Fetch followups with relations
+                    // Removed the assignee relation query since assigned_to is now just a TEXT column
+                    const { data: fwData, error: fwError } = await supabaseClient
+                        .from('customer_followups')
+                        .select('*, customer:customer_id(fullname, mobile)');
+
+                    if (fwError) throw fwError;
+
+                    // Calculate Dashboard Statuses
+                    const sortedFw = (fwData || []).sort((a,b) => new Date(a.next_action_date) - new Date(b.next_action_date));
+                    setFollowups(sortedFw);
+
+                    // Fetch Invoices and Subscriptions to Calculate ROI
+                    // Assumption: An invoice or sub created within 7 days of a followup is attributed to that followup/agent
+                    const [invRes, subRes] = await Promise.all([
+                        supabaseClient.from('demandinvoice').select('customeruserid, createdat, totalamount').eq('isdeleted', false),
+                        supabaseClient.from('user_subscription_history').select('user_id, created_at, paid_amount')
+                    ]);
+
+                    const invoices = invRes.data || [];
+                    const subs = subRes.data || [];
+
+                    // Calculate Agent ROI
+                    const agentStats = {};
+                    
+                    sortedFw.forEach(fw => {
+                        // Only count completed followups towards ROI
+                        if (fw.status !== 'completed' || !fw.assigned_to) return;
+                        
+                        const agentId = fw.assigned_to;
+                        const agentName = fw.assigned_to || 'نامشخص';
+                        
+                        if (!agentStats[agentId]) {
+                            agentStats[agentId] = { name: agentName, totalFollowups: 0, conversions: 0, revenue: 0 };
+                        }
+                        
+                        agentStats[agentId].totalFollowups += 1;
+
+                        const fwDate = new Date(fw.created_at);
+                        const windowEnd = new Date(fwDate.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
+                        
+                        let hasConversion = false;
+                        let generatedRevenue = 0;
+
+                        // Check Invoices
+                        invoices.forEach(inv => {
+                            if (inv.customeruserid === fw.customer_id) {
+                                const invDate = new Date(inv.createdat);
+                                if (invDate >= fwDate && invDate <= windowEnd) {
+                                    hasConversion = true;
+                                    generatedRevenue += Number(inv.totalamount || 0);
+                                }
+                            }
+                        });
+
+                        // Check Subscriptions
+                        subs.forEach(sub => {
+                            if (sub.user_id === fw.customer_id) {
+                                const subDate = new Date(sub.created_at);
+                                if (subDate >= fwDate && subDate <= windowEnd) {
+                                    hasConversion = true;
+                                    generatedRevenue += Number(sub.paid_amount || 0);
+                                }
+                            }
+                        });
+
+                        if (hasConversion) {
+                            agentStats[agentId].conversions += 1;
+                            agentStats[agentId].revenue += generatedRevenue;
+                        }
+                    });
+
+                    const roiArray = Object.values(agentStats).sort((a,b) => b.revenue - a.revenue);
+                    setAgentRoi(roiArray);
+
+                } catch (err) {
+                    console.error('Error fetching followup dashboard data', err);
+                }
+                setIsLoading(false);
+            };
+
+            useEffect(() => {
+                fetchData();
+            }, []);
+
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+
+            const pendingFw = followups.filter(fw => fw.status === 'pending');
+            const overdue = pendingFw.filter(fw => fw.next_action_date && fw.next_action_date < todayStr);
+            const today = pendingFw.filter(fw => fw.next_action_date === todayStr);
+            const upcoming = pendingFw.filter(fw => fw.next_action_date && fw.next_action_date > todayStr);
+
+            const FollowupCard = ({ fw, type }) => {
+                let badgeClass = '';
+                if(type === 'overdue') badgeClass = 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-800/50';
+                if(type === 'today') badgeClass = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800/50';
+                if(type === 'upcoming') badgeClass = 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-800/50';
+
+                return (
+                    <div className={`p-4 rounded-xl border ${badgeClass} mb-3 flex flex-col gap-2`}>
+                        <div className="flex justify-between items-start">
+                            <span className="font-bold text-sm">{fw.customer?.fullname || fw.customer?.mobile || 'مشتری نامشخص'}</span>
+                            <span className="text-xs font-mono" dir="ltr">{fw.next_action_date ? formatJalaali(fw.next_action_date) : '-'}</span>
+                        </div>
+                        <p className="text-xs opacity-90 line-clamp-2">{fw.next_action_notes || 'بدون توضیحات تکمیلی'}</p>
+                        <div className="flex items-center gap-1 text-[11px] opacity-80 mt-1 pt-2 border-t border-current">
+                            <i className="fa-solid fa-user-tie"></i> مسئول: {fw.assigned_to || 'اختصاص داده نشده'}
+                        </div>
+                    </div>
+                )
+            };
+
+            return (
+                <div className="animate-fadeIn space-y-6 relative">
+                    {isLoading && (
+                        <div className="absolute inset-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl min-h-[400px]">
+                            <div className="spinner w-10 h-10 border-indigo-600"></div>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                        <div>
+                            <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">داشبورد پیگیری و بازاریابی (CRM)</h1>
+                            <p className="text-gray-500 dark:text-gray-400">تقویم پیگیری‌های امروز و تحلیل درآمد حاصل از پیگیری‌ها (Retargeting ROI)</p>
+                        </div>
+                        <button onClick={() => setShowSqlModal(true)} className="bg-gray-800 hover:bg-gray-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2">
+                            <i className="fa-solid fa-database text-teal-400"></i>
+                            ساختار دیتابیس (مهم)
+                        </button>
+                    </div>
+
+                    {/* Followup Calendar / Kanban */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-[500px]">
+                            <h3 className="font-bold text-red-600 dark:text-red-400 mb-4 flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
+                                <span><i className="fa-solid fa-triangle-exclamation"></i> سررسید گذشته</span>
+                                <span className="bg-red-100 dark:bg-red-900/30 px-2 py-0.5 rounded text-xs">{overdue.length}</span>
+                            </h3>
+                            <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
+                                {overdue.map(fw => <FollowupCard key={fw.id} fw={fw} type="overdue" />)}
+                                {overdue.length === 0 && <p className="text-center text-xs text-gray-400 py-10">موردی نیست.</p>}
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-[500px]">
+                            <h3 className="font-bold text-amber-600 dark:text-amber-400 mb-4 flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
+                                <span><i className="fa-regular fa-calendar-check"></i> پیگیری‌های امروز</span>
+                                <span className="bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded text-xs">{today.length}</span>
+                            </h3>
+                            <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
+                                {today.map(fw => <FollowupCard key={fw.id} fw={fw} type="today" />)}
+                                {today.length === 0 && <p className="text-center text-xs text-gray-400 py-10">موردی برای امروز تنظیم نشده است.</p>}
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col h-[500px]">
+                            <h3 className="font-bold text-blue-600 dark:text-blue-400 mb-4 flex justify-between items-center pb-2 border-b border-gray-100 dark:border-gray-700">
+                                <span><i className="fa-solid fa-arrow-trend-up"></i> روزهای آینده</span>
+                                <span className="bg-blue-100 dark:bg-blue-900/30 px-2 py-0.5 rounded text-xs">{upcoming.length}</span>
+                            </h3>
+                            <div className="overflow-y-auto flex-1 custom-scrollbar pr-1">
+                                {upcoming.map(fw => <FollowupCard key={fw.id} fw={fw} type="upcoming" />)}
+                                {upcoming.length === 0 && <p className="text-center text-xs text-gray-400 py-10">موردی نیست.</p>}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Agent ROI Table */}
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        <div className="p-5 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <i className="fa-solid fa-money-bill-trend-up text-teal-500"></i>
+                                تأثیر پیگیری‌ها در درآمد (Attribution Modeling)
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1">محاسبه بر اساس خریدهایی که نهایتاً ۷ روز پس از یک پیگیریِ موفق ثبت شده‌اند.</p>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-right text-gray-500 dark:text-gray-400">
+                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                    <tr>
+                                        <th className="px-6 py-4">مسئول پیگیری (Agent)</th>
+                                        <th className="px-6 py-4 text-center">کل پیگیری‌های انجام شده</th>
+                                        <th className="px-6 py-4 text-center">پیگیری‌های منجر به فروش</th>
+                                        <th className="px-6 py-4 text-center">نرخ تبدیل (Conversion)</th>
+                                        <th className="px-6 py-4 text-left">درآمد جذب شده (تومان)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {agentRoi.length === 0 && !isLoading ? (
+                                        <tr><td colSpan="5" className="text-center py-8">داده‌ای برای محاسبه تأثیر پیگیری‌ها وجود ندارد.</td></tr>
+                                    ) : (
+                                        agentRoi.map((stat, idx) => {
+                                            const conversionRate = stat.totalFollowups > 0 ? ((stat.conversions / stat.totalFollowups) * 100).toFixed(1) : 0;
+                                            return (
+                                                <tr key={idx} className="bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                                    <td className="px-6 py-4 font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-full bg-teal-100 text-teal-600 dark:bg-teal-900/30 flex items-center justify-center font-bold text-xs">
+                                                            {stat.name.charAt(0)}
+                                                        </div>
+                                                        {stat.name}
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center font-mono">{stat.totalFollowups}</td>
+                                                    <td className="px-6 py-4 text-center font-mono text-teal-600 dark:text-teal-400 font-bold">{stat.conversions}</td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className="bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 px-2 py-1 rounded text-xs font-mono" dir="ltr">
+                                                            {conversionRate}%
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-left font-mono font-bold text-green-600 dark:text-green-400 text-lg">
+                                                        {stat.revenue > 0 ? Number(stat.revenue).toLocaleString('en-US') : '-'}
+                                                    </td>
+                                                </tr>
+                                            )
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <Modal isOpen={showSqlModal} onClose={() => setShowSqlModal(false)} title="ساختار دیتابیس برای پیگیری پیشرفته" size="max-w-4xl">
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-300">
+                                برای اینکه سیستم بتواند مشخص کند چه کسی پیگیری را انجام می‌دهد، باید جدول <code>customer_followups</code> را بروزرسانی کنید. کد زیر را در بخش SQL Editor در Supabase اجرا کنید:
+                            </p>
+                            <div className="bg-gray-900 rounded-lg p-4 overflow-x-auto custom-scrollbar" dir="ltr">
+                                <pre className="text-teal-400 font-mono text-sm leading-relaxed">
+{`-- Add assignment logic to followups table
+ALTER TABLE customer_followups
+ADD COLUMN IF NOT EXISTS assigned_to UUID REFERENCES profiles(id),
+ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES auth.users(id) DEFAULT auth.uid();
+
+-- Optional: Create index for faster dashboard queries
+CREATE INDEX IF NOT EXISTS idx_followups_assigned_to ON customer_followups(assigned_to);
+
+-- Optional: If you want to calculate ROI perfectly on the backend instead of frontend, you can use this View:
+CREATE OR REPLACE VIEW agent_followup_roi AS
+WITH followup_sales AS (
+    SELECT 
+        f.id AS followup_id,
+        f.assigned_to AS agent_id,
+        (
+            SELECT SUM(paid_amount) 
+            FROM user_subscription_history ush 
+            WHERE ush.user_id = f.customer_id AND ush.created_at >= f.created_at AND ush.created_at <= f.created_at + INTERVAL '7 days'
+        ) AS sub_revenue,
+        (
+            SELECT SUM(totalamount) 
+            FROM demandinvoice inv 
+            WHERE inv.customeruserid = f.customer_id AND inv.createdat >= f.created_at AND inv.createdat <= f.created_at + INTERVAL '7 days' AND inv.isdeleted = false
+        ) AS inv_revenue
+    FROM customer_followups f
+    WHERE f.status = 'completed' AND f.assigned_to IS NOT NULL
+)
+SELECT 
+    agent_id,
+    COUNT(followup_id) AS total_followups,
+    COUNT(followup_id) FILTER (WHERE sub_revenue > 0 OR inv_revenue > 0) AS conversions,
+    COALESCE(SUM(sub_revenue), 0) + COALESCE(SUM(inv_revenue), 0) AS generated_revenue
+FROM followup_sales
+GROUP BY agent_id;`}
+                                </pre>
+                            </div>
+                        </div>
+                    </Modal>
+
+                </div>
+            );
+        };
+
+        // ==================================================
         // Settings / Attributes Management Component
         // ==================================================
         const SettingsManagement = ({ appData, fetchData }) => {
@@ -2981,430 +3289,26 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
         };
 
         // ==================================================
-        // Subscription Settings Component
-        // ==================================================
-        const SubscriptionSettings = ({ appData, fetchData }) => {
-            const [confirmState, setConfirmState] = useState({ isOpen: false, onConfirm: null, message: '' });
-            
-            // Integrated Assign Membership App Component State
-            const [users, setUsers] = useState([]);
-            const [selectedUserId, setSelectedUserId] = useState('');
-            const [selectedPlanId, setSelectedPlanId] = useState('');
-            const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-            const [paidAmount, setPaidAmount] = useState('');
-            const [history, setHistory] = useState([]);
-            const [historySearch, setHistorySearch] = useState('');
-            const [isLoadingAssign, setIsLoadingAssign] = useState(false);
-            const [isSubmitting, setIsSubmitting] = useState(false);
-            const [editingId, setEditingId] = useState(null);
-            const [message, setMessage] = useState({ type: '', text: '' });
-
-            const fetchAssignData = useCallback(async () => {
-                setIsLoadingAssign(true);
-                try {
-                    const { data: usersData } = await supabaseClient.from('profiles').select('id, fullname, firstname, prefix, mobile, email').order('createdat', { ascending: false });
-                    if (usersData) {
-                        const prefixMap = { 'Mr': 'جناب', 'Mrs': 'بانو', 'Company': 'شرکت' };
-                        setUsers(usersData.map(u => {
-                            const prefixStr = prefixMap[u.prefix] ? `${prefixMap[u.prefix]} ` : '';
-                            const fNameStr = u.firstname ? `${u.firstname} ` : '';
-                            const lNameStr = u.fullname || 'بدون نام';
-                            const emailStr = (u.email && !u.email.includes('placeholder.email')) ? ` - ${u.email}` : '';
-                            return {
-                                id: u.id,
-                                title: `${prefixStr}${fNameStr}${lNameStr}`.trim(),
-                                subtitle: `${u.mobile || 'بدون شماره'}${emailStr}`
-                            };
-                        }));
-                    }
-                    await fetchHistory();
-                } catch (error) {
-                    console.error("Error fetching data:", error);
-                    setMessage({ type: 'error', text: 'خطا در دریافت اطلاعات از سرور.' });
-                }
-                setIsLoadingAssign(false);
-            }, []);
-
-            const fetchHistory = async () => {
-                const { data: historyData } = await supabaseClient
-                    .from('user_subscription_history')
-                    .select(`
-                        id, 
-                        user_id,
-                        subscription_plan_id,
-                        start_date, 
-                        paid_amount,
-                        created_at,
-                        profiles:user_id(fullname, firstname, prefix, mobile),
-                        subscription_plan:subscription_plan_id(title, duration_days)
-                    `)
-                    .order('created_at', { ascending: false });
-                setHistory(historyData || []);
-            };
-
-            useEffect(() => {
-                fetchAssignData();
-            }, [fetchAssignData]);
-
-            const filteredHistory = useMemo(() => {
-                if (!historySearch.trim()) return history;
-                const term = historySearch.toLowerCase().trim();
-                return history.filter(item => {
-                    const fullName = item.profiles?.fullname?.toLowerCase() || '';
-                    const firstName = item.profiles?.firstname?.toLowerCase() || '';
-                    const mobile = item.profiles?.mobile?.toLowerCase() || '';
-                    const planTitle = item.subscription_plan?.title?.toLowerCase() || '';
-                    return fullName.includes(term) || firstName.includes(term) || mobile.includes(term) || planTitle.includes(term);
-                });
-            }, [history, historySearch]);
-
-            const handleEditClick = (item) => {
-                setEditingId(item.id);
-                setSelectedUserId(item.user_id);
-                setSelectedPlanId(item.subscription_plan_id);
-                setStartDate(item.start_date);
-                setPaidAmount(item.paid_amount || '');
-                setMessage({ type: '', text: '' });
-            };
-
-            const cancelEdit = () => {
-                setEditingId(null);
-                setSelectedUserId('');
-                setSelectedPlanId('');
-                setStartDate(new Date().toISOString().split('T')[0]);
-                setPaidAmount('');
-                setMessage({ type: '', text: '' });
-            };
-
-            const handleAssignSubmit = async (e) => {
-                e.preventDefault();
-                setMessage({ type: '', text: '' });
-
-                if (!selectedUserId) return setMessage({ type: 'error', text: 'لطفاً کاربر را انتخاب کنید.' });
-                if (!selectedPlanId) return setMessage({ type: 'error', text: 'لطفاً طرح اشتراک را مشخص کنید.' });
-                if (!startDate) return setMessage({ type: 'error', text: 'لطفاً تاریخ شروع را تعیین کنید.' });
-
-                setIsSubmitting(true);
-                try {
-                    const amountToSave = paidAmount ? parseInt(paidAmount, 10) : 0;
-                    const planIdToSave = parseInt(selectedPlanId, 10); 
-
-                    if (editingId) {
-                        const { error: historyError } = await supabaseClient.from('user_subscription_history')
-                            .update({
-                                user_id: selectedUserId,
-                                subscription_plan_id: planIdToSave,
-                                start_date: startDate,
-                                paid_amount: amountToSave
-                            })
-                            .eq('id', editingId);
-                        if (historyError) throw historyError;
-                    } else {
-                        const { error: historyError } = await supabaseClient.from('user_subscription_history').insert({
-                            user_id: selectedUserId,
-                            subscription_plan_id: planIdToSave,
-                            start_date: startDate,
-                            paid_amount: amountToSave
-                        });
-                        if (historyError) throw historyError;
-                    }
-
-                    const { error: profileUpdateError } = await supabaseClient.from('profiles').update({
-                        subscription_plan_id: planIdToSave,
-                        subscription_start_date: startDate
-                    }).eq('id', selectedUserId);
-
-                    if (profileUpdateError) throw profileUpdateError;
-
-                    setMessage({ type: 'success', text: editingId ? 'اشتراک با موفقیت ویرایش شد!' : 'اشتراک با موفقیت به کاربر تخصیص یافت!' });
-                    cancelEdit();
-                    fetchHistory();
-                    if(fetchData) fetchData(); // refresh global data
-                } catch (error) {
-                    console.error("Submission error:", error);
-                    setMessage({ type: 'error', text: `خطا در ثبت: ${error.message}` });
-                }
-                setIsSubmitting(false);
-            };
-
-            return (
-                <div className="animate-fadeIn space-y-8">
-                    <div>
-                        <h1 className="text-2xl font-bold mb-2 text-gray-900 dark:text-white">تنظیمات اشتراک‌ها</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6">مدیریت طرح‌ها، تعیین مدت زمان اعتبار و واگذاری اشتراک به مشتریان</p>
-                        
-                        {/* New Integrated Assign Membership UI */}
-                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-8 relative">
-                            {isLoadingAssign && (
-                                <div className="absolute inset-0 bg-white/50 dark:bg-gray-900/50 backdrop-blur-sm z-10 flex items-center justify-center rounded-xl">
-                                    <div className="spinner w-8 h-8 border-indigo-600"></div>
-                                </div>
-                            )}
-                            <div className="lg:col-span-5">
-                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-                                    <div className={`p-5 text-white transition-colors duration-300 ${editingId ? 'bg-amber-500' : 'bg-indigo-600'}`}>
-                                        <h2 className="text-lg font-bold flex items-center gap-2">
-                                            <i className={`fa-solid ${editingId ? 'fa-pen-to-square' : 'fa-plus-circle'}`}></i> 
-                                            {editingId ? 'ویرایش اشتراک ثبت شده' : 'فرم ثبت اشتراک جدید'}
-                                        </h2>
-                                    </div>
-                                    
-                                    <form onSubmit={handleAssignSubmit} className="p-6 space-y-6">
-                                        <div className="relative">
-                                            <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2">
-                                                <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 w-6 h-6 rounded-full flex items-center justify-center text-xs">۱</span>
-                                                تاریخ شروع اشتراک
-                                            </label>
-                                            <div className="relative z-[1000] flex items-center gap-3">
-                                                <div className="w-12 h-[52px] bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl flex items-center justify-center text-indigo-500 dark:text-indigo-400 shadow-sm shrink-0">
-                                                    <i className="fa-regular fa-calendar-alt text-lg"></i>
-                                                </div>
-                                                <JalaliDatePicker 
-                                                    value={startDate} 
-                                                    onChange={setStartDate} 
-                                                />
-                                            </div>
-                                            {startDate && (
-                                                <p className="text-xs text-green-600 dark:text-green-400 mt-2 font-bold opacity-80"><i className="fa-solid fa-server ml-1 text-gray-400"></i> خروجی میلادی جهت سرور: <span dir="ltr">{startDate}</span></p>
-                                            )}
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2">
-                                                <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 w-6 h-6 rounded-full flex items-center justify-center text-xs">۲</span>
-                                                انتخاب طرح اشتراک
-                                            </label>
-                                            <div className="relative">
-                                                <select 
-                                                    value={selectedPlanId} 
-                                                    onChange={(e) => setSelectedPlanId(e.target.value)} 
-                                                    className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-3.5 pr-10 appearance-none shadow-sm cursor-pointer outline-none"
-                                                >
-                                                    <option value="" disabled>طرح مورد نظر را انتخاب کنید...</option>
-                                                    {appData.subscriptionPlans.map(plan => (
-                                                        <option key={plan.id} value={plan.id}>
-                                                            {plan.title} {plan.duration_days ? `(${plan.duration_days} روزه)` : ''}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                                <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-yellow-500">
-                                                    <i className="fa-solid fa-crown"></i>
-                                                </div>
-                                                <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-gray-400">
-                                                    <i className="fa-solid fa-chevron-down text-sm"></i>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="relative z-[900]">
-                                            <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2">
-                                                <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 w-6 h-6 rounded-full flex items-center justify-center text-xs">۳</span>
-                                                کاربر دریافت‌کننده
-                                            </label>
-                                            <SearchableSelect
-                                                options={users}
-                                                value={selectedUserId}
-                                                onChange={setSelectedUserId}
-                                                placeholder="جستجوی نام یا شماره موبایل کاربر..."
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="block text-sm font-bold text-gray-800 dark:text-gray-200 mb-2 flex items-center gap-2">
-                                                <span className="bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-400 w-6 h-6 rounded-full flex items-center justify-center text-xs">۴</span>
-                                                مبلغ دریافتی از مشتری <span className="text-xs font-normal text-gray-400">(اختیاری)</span>
-                                            </label>
-                                            <div className="relative">
-                                                <input 
-                                                    type="text" 
-                                                    value={paidAmount ? Number(paidAmount).toLocaleString('en-US') : ''}
-                                                    onChange={(e) => setPaidAmount(e.target.value.replace(/\D/g, ''))}
-                                                    placeholder="مثلاً: 500,000"
-                                                    className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 block p-3.5 pl-16 pr-12 shadow-sm outline-none"
-                                                    dir="ltr"
-                                                />
-                                                <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none text-gray-500 dark:text-gray-400 font-bold text-xs">
-                                                    تومان
-                                                </div>
-                                                <div className="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-green-500">
-                                                    <i className="fa-solid fa-money-bill-wave"></i>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {message.text && (
-                                            <div className={`p-4 rounded-xl text-sm font-bold flex items-start gap-3 ${message.type === 'error' ? 'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border border-red-100 dark:border-red-800' : 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border border-green-100 dark:border-green-800'}`}>
-                                                <i className={`fa-solid mt-0.5 ${message.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-check text-lg'}`}></i>
-                                                <span>{message.text}</span>
-                                            </div>
-                                        )}
-
-                                        <div className="pt-2 flex gap-3">
-                                            <button 
-                                                type="submit" 
-                                                disabled={isSubmitting} 
-                                                className={`flex-1 text-white font-bold rounded-xl text-base px-5 py-4 flex justify-center items-center gap-2 shadow-md transition-all ${isSubmitting ? 'bg-indigo-400 cursor-not-allowed opacity-70' : (editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700')} hover:shadow-lg active:scale-[0.98]`}
-                                            >
-                                                {isSubmitting ? <div className="spinner spinner-white w-5 h-5 border-white"></div> : <i className={`fa-solid ${editingId ? 'fa-save' : 'fa-bolt text-yellow-300'}`}></i>}
-                                                {isSubmitting ? 'در حال ثبت...' : (editingId ? 'ذخیره تغییرات' : 'ثبت و اعمال اشتراک')}
-                                            </button>
-
-                                            {editingId && (
-                                                <button
-                                                    type="button"
-                                                    onClick={cancelEdit}
-                                                    disabled={isSubmitting}
-                                                    className="px-5 py-4 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-bold rounded-xl transition-all focus:ring-2 focus:ring-gray-300"
-                                                >
-                                                    لغو
-                                                </button>
-                                            )}
-                                        </div>
-                                    </form>
-                                </div>
-                            </div>
-
-                            <div className="lg:col-span-7">
-                                <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden h-full flex flex-col">
-                                    <div className="p-4 border-b border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-50/50 dark:bg-gray-800/50 gap-4">
-                                        <h2 className="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2 whitespace-nowrap">
-                                            <i className="fa-solid fa-clock-rotate-left text-gray-400"></i> تاریخچه کامل اشتراک‌ها
-                                        </h2>
-                                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                                            <div className="relative flex-1 sm:w-64">
-                                                <input 
-                                                    type="text" 
-                                                    placeholder="جستجو مشتری یا طرح..." 
-                                                    value={historySearch}
-                                                    onChange={(e) => setHistorySearch(e.target.value)}
-                                                    className="w-full bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm rounded-lg pl-8 pr-3 py-2 text-gray-900 dark:text-white focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-                                                />
-                                                <i className="fa-solid fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-                                            </div>
-                                            <button onClick={fetchHistory} className="text-gray-400 hover:text-indigo-600 transition-colors p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-gray-700 shrink-0" title="بروزرسانی">
-                                                <i className="fa-solid fa-rotate-right"></i>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex-1 overflow-x-auto custom-scrollbar p-2 max-h-[600px] overflow-y-auto">
-                                        {filteredHistory.length === 0 ? (
-                                            <div className="flex flex-col items-center justify-center h-full py-12 text-gray-400">
-                                                <i className="fa-solid fa-inbox text-4xl mb-3 opacity-20"></i>
-                                                <p>هیچ اشتراکی یافت نشد.</p>
-                                            </div>
-                                        ) : (
-                                            <table className="w-full text-sm text-right">
-                                                <thead className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg sticky top-0 z-10 shadow-sm">
-                                                    <tr>
-                                                        <th className="px-4 py-3 font-bold rounded-r-lg">کاربر</th>
-                                                        <th className="px-4 py-3 font-bold">طرح</th>
-                                                        <th className="px-4 py-3 font-bold">مبلغ دریافتی</th>
-                                                        <th className="px-4 py-3 font-bold">تاریخ شروع</th>
-                                                        <th className="px-4 py-3 font-bold text-left">زمان ثبت</th>
-                                                        <th className="px-4 py-3 font-bold rounded-l-lg text-center">عملیات</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {filteredHistory.map((item) => {
-                                                        const isHistActive = isSubscriptionActive(item.start_date, item.subscription_plan?.duration_days);
-                                                        return (
-                                                        <tr key={item.id} className="border-b border-gray-50 dark:border-gray-700 hover:bg-gray-50/80 dark:hover:bg-gray-700/50 transition-colors last:border-0">
-                                                            <td className="px-4 py-4">
-                                                                <div className="font-bold text-gray-800 dark:text-gray-200">
-                                                                    {item.profiles?.prefix === 'Mr' ? 'جناب ' : (item.profiles?.prefix === 'Mrs' ? 'بانو ' : (item.profiles?.prefix === 'Company' ? 'شرکت ' : ''))}
-                                                                    {item.profiles?.firstname ? `${item.profiles.firstname} ` : ''}
-                                                                    {item.profiles?.fullname || 'بدون نام'}
-                                                                </div>
-                                                                <div className="text-xs text-gray-500 font-mono mt-0.5">{item.profiles?.mobile || '-'}</div>
-                                                            </td>
-                                                            <td className="px-4 py-4">
-                                                                <div className="flex flex-col gap-1 items-start">
-                                                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-yellow-50 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-400 border border-yellow-200/50 dark:border-yellow-800 text-xs font-bold whitespace-nowrap">
-                                                                        <i className="fa-solid fa-crown text-yellow-500"></i>
-                                                                        {item.subscription_plan?.title || '-'}
-                                                                    </span>
-                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isHistActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'}`}>
-                                                                        {isHistActive ? 'فعال' : 'پایان یافته'}
-                                                                    </span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4">
-                                                                <div className="font-bold text-gray-700 dark:text-gray-300">
-                                                                    {item.paid_amount !== null && item.paid_amount !== undefined ? (
-                                                                        <span className="text-green-600 dark:text-green-400 font-mono text-base">{Number(item.paid_amount).toLocaleString('en-US')} <span className="text-xs text-gray-400 font-vazir">تومان</span></span>
-                                                                    ) : (
-                                                                        <span className="text-gray-300 dark:text-gray-600 text-xs">-</span>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4">
-                                                                <div className="flex items-center gap-1.5 text-gray-700 dark:text-gray-300 font-medium">
-                                                                    <i className="fa-regular fa-calendar-check text-green-500"></i>
-                                                                    {formatJalaali(item.start_date)}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-4 text-left text-xs text-gray-400" dir="ltr">
-                                                                {new Date(item.created_at).toLocaleString('fa-IR', { hour: '2-digit', minute:'2-digit', year:'numeric', month:'numeric', day:'numeric' })}
-                                                            </td>
-                                                            <td className="px-4 py-4 text-center">
-                                                                <button onClick={() => handleEditClick(item)} className="text-gray-400 hover:text-amber-500 transition-colors p-2 rounded-lg hover:bg-amber-50 dark:hover:bg-gray-700" title="ویرایش این اشتراک">
-                                                                    <i className="fa-solid fa-pen"></i>
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    )})}
-                                                </tbody>
-                                            </table>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Existing Manager Section */}
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div className="lg:col-span-2">
-                                <SubscriptionPlanManager
-                                    onSave={fetchData}
-                                    items={appData.subscriptionPlans}
-                                    confirmModal={(config) => setConfirmState({...config, onConfirm: () => {config.onConfirm(); setConfirmState({isOpen: false})}})}
-                                />
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-200 dark:border-gray-700">
-                        <h2 className="text-xl font-bold mb-2 text-gray-900 dark:text-white">قوانین و تخفیف‌های اشتراک</h2>
-                        <p className="text-gray-500 dark:text-gray-400 mb-6">تعیین دسته‌بندی‌های مشمول و درصد تخفیف انبارها</p>
-                        <SubscriptionRulesManager appData={appData} />
-                    </div>
-
-                    <ConfirmModal isOpen={confirmState.isOpen} onClose={() => setConfirmState({isOpen: false})} onConfirm={confirmState.onConfirm} title="تایید عملیات" message={confirmState.message} />
-                </div>
-            );
-        };
-
-        // ==================================================
         // Main App Component
         // ==================================================
         const App = () => {
             const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
             const [currentPage, setCurrentPage] = useState('users'); // Changed default to user management
             const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-            const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [], subscriptionPlans: [] });
+            const [appData, setAppData] = useState({ roles: [], provinces: [], marketingChannels: [], shippingCompanies: [], locationAttributes: [], subscriptionPlans: [], users: [] });
             const [isLoading, setIsLoading] = useState(true);
 
             const fetchAppData = useCallback(async () => {
                 setIsLoading(true);
                 try {
-                    const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes, subPlanRes] = await Promise.all([
+                    const [rolesRes, provinceRes, channelRes, shippingRes, locAttrRes, subPlanRes, usersRes] = await Promise.all([
                         supabaseClient.from('role').select('*').order('title'),
                         supabaseClient.from('province').select('*').order('title'),
                         supabaseClient.from('marketingchannel').select('*').order('title'),
                         supabaseClient.from('shippingcompany').select('*').order('title'),
                         supabaseClient.from('location_attribute_key').select('*').order('title'),
-                        supabaseClient.from('subscription_plan').select('*').order('title')
+                        supabaseClient.from('subscription_plan').select('*').order('title'),
+                        supabaseClient.from('profiles').select('id, fullname, mobile').order('createdat', { ascending: false }).limit(200)
                     ]);
                     
                     setAppData({
@@ -3413,7 +3317,8 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
                         marketingChannels: channelRes.data || [],
                         shippingCompanies: shippingRes.data || [],
                         locationAttributes: locAttrRes.data || [],
-                        subscriptionPlans: subPlanRes.data || [] 
+                        subscriptionPlans: subPlanRes.data || [],
+                        users: usersRes.data || []
                     });
                 } catch (error) {
                     console.error("Initial data fetch error:", error);
@@ -3443,10 +3348,11 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
                 }
                 switch (currentPage) {
                     case 'users': return <UserManagement appData={appData} fetchData={fetchAppData} />;
+                    case 'followups': return <FollowupDashboard appData={appData} />;
+                    case 'scoring': return <SubscriberScoring appData={appData} />;
+                    case 'churn': return <ChurnAnalysis appData={appData} />;
                     case 'subscriptions': return <SubscriptionSettings appData={appData} fetchData={fetchAppData} />;
                     case 'settings': return <SettingsManagement appData={appData} fetchData={fetchAppData} />;
-                    case 'churn': return <ChurnAnalysis appData={appData} />;
-                    case 'scoring': return <SubscriberScoring appData={appData} />;
                     default: return <UserManagement appData={appData} fetchData={fetchAppData} />;
                 }
             };
@@ -3469,9 +3375,10 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
                             Bazaario
                         </span>
                     </div>
-                    <nav className="flex-1 p-4">
+                    <nav className="flex-1 p-4 overflow-y-auto custom-scrollbar">
                         <ul className="space-y-2">
                             <NavItem page="users" icon="fa-users">مدیریت کاربران</NavItem>
+                            <NavItem page="followups" icon="fa-headset">داشبورد پیگیری (CRM)</NavItem>
                             <NavItem page="scoring" icon="fa-heart-pulse">ارزش‌گذاری مشتریان</NavItem>
                             <NavItem page="churn" icon="fa-chart-line">تحلیل ریزش (Churn)</NavItem>
                             <NavItem page="subscriptions" icon="fa-crown">تنظیمات اشتراک‌</NavItem>
@@ -3480,7 +3387,7 @@ LEFT JOIN user_stats s ON p.id = s.user_id;
                     </nav>
                     <div className="p-4 border-t border-gray-200 dark:border-gray-700">
                         <button onClick={toggleTheme} className="w-full flex items-center justify-center gap-2 p-2 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-                           {theme === 'light' ? <><i className="fa-solid fa-moon"></i> حالت تاریک</> : <><i className="fa-solid fa-sun"></i> حالت روشن</>}
+                            {theme === 'light' ? <><i className="fa-solid fa-moon"></i> حالت تاریک</> : <><i className="fa-solid fa-sun"></i> حالت روشن</>}
                         </button>
                     </div>
                 </aside>
