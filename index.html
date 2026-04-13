@@ -1241,24 +1241,37 @@
 
             const handleSubmit = async (e) => {
                 e.preventDefault();
+                if (isSubmitting) return; // جلوگیری از اجرای مجدد در صورت دابل-کلیک سریع
+
                 setIsSubmitting(true);
                 
-                const payload = {
-                    customer_id: user.id,
-                    action_taken: formData.action_taken || null,
-                    notes: formData.notes || null,
-                    next_action_notes: formData.next_action_notes || null,
-                    status: formData.status
-                };
-                
-                if (formData.next_action_date) {
-                    payload.next_action_date = formData.next_action_date;
-                }
+                try {
+                    const payload = {
+                        customer_id: user.id,
+                        action_taken: formData.action_taken || null,
+                        notes: formData.notes || null,
+                        next_action_notes: formData.next_action_notes || null,
+                        status: formData.status
+                    };
+                    
+                    if (formData.next_action_date) {
+                        payload.next_action_date = formData.next_action_date;
+                    }
 
-                await supabaseClient.from('customer_followups').insert(payload);
-                setIsSubmitting(false);
-                fetchFollowups();
-                if(onSave) onSave();
+                    const { error } = await supabaseClient.from('customer_followups').insert(payload);
+                    if (error) throw error;
+                    
+                    // خالی کردن فرم برای جلوگیری از ثبت مجدد تصادفی همان داده‌ها
+                    setFormData({ action_taken: '', notes: '', next_action_date: '', next_action_notes: '', status: 'pending' });
+                    
+                    fetchFollowups();
+                    if(onSave) onSave();
+                } catch (error) {
+                    console.error("Error submitting followup:", error);
+                    alert("خطا در ثبت پیگیری. لطفاً وضعیت اینترنت خود را بررسی کنید.");
+                } finally {
+                    setIsSubmitting(false);
+                }
             };
 
             const getStatusLabel = (status) => {
@@ -1499,7 +1512,7 @@
 
                 const headers = [
                     'شناسه', 'نام کامل', 'نام کوچک', 'عنوان', 'شماره موبایل', 'ایمیل',
-                    'نقش', 'وضعیت', 'استان', 'شهر', 'آدرس دقیق', 'کد پستی',
+                    'نقش', 'وضعیت', 'استان', 'شهر', 'آدرس دقیق', 'کد پستی', 'شناسه آدرس(ها)',
                     'طرح اشتراک', 'تاریخ شروع اشتراک', 'آخرین اکشن', 'آخرین پیگیری', 'تاریخ ثبت نام'
                 ];
 
@@ -1509,6 +1522,7 @@
                     const city = loc.city?.title || '';
                     const address = loc.address || '';
                     const postalcode = loc.postalcode || '';
+                    const locationIdsStr = u.userlocation?.map(ul => ul.location?.id).filter(id => id).join(' - ') || '';
                     const plan = u.subscription_plan?.title || 'بدون اشتراک';
                     const startDate = u.subscription_start_date ? formatJalaali(u.subscription_start_date) : '';
                     const status = u.isdeleted ? 'غیرفعال' : 'فعال';
@@ -1519,7 +1533,7 @@
 
                     return [
                         u.id, u.fullname || '', u.firstname || '', prefixLabel, u.mobile || '', u.email || '',
-                        u.role?.title || '', status, province, city, address, postalcode,
+                        u.role?.title || '', status, province, city, address, postalcode, locationIdsStr,
                         plan, startDate, lastAction, lastFw, createdAt
                     ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
                 });
@@ -1601,7 +1615,8 @@
                                 <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
                                     <tr>
                                         <th className="px-4 py-3">کاربر</th>
-                                        <th className="px-4 py-3 hidden lg:table-cell">موقعیت</th>
+                                        <th className="px-4 py-3 hidden md:table-cell">موقعیت</th>
+                                        <th className="px-4 py-3 hidden md:table-cell text-center">شناسه آدرس</th>
                                         <th className="px-4 py-3">اشتراک</th>
                                         <th className="px-4 py-3 hidden md:table-cell">آخرین فعالیت‌ها</th>
                                         <th className="px-4 py-3 text-center">وضعیت/نقش</th>
@@ -1618,6 +1633,7 @@
                                             const province = user.userlocation[0]?.location?.city?.province?.title;
                                             const city = user.userlocation[0]?.location?.city?.title;
                                             const locationText = province && city ? `${province}، ${city}` : '-';
+                                            const locationIdsList = user.userlocation?.map(ul => ul.location?.id).filter(id => id).join('، ') || '-';
                                             const firstName = user.firstname || '';
                                             const isActive = user.subscription_plan ? isSubscriptionActive(user.subscription_start_date, user.subscription_plan.duration_days) : false;
 
@@ -1634,7 +1650,8 @@
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3 hidden lg:table-cell text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{locationText}</td>
+                                                    <td className="px-4 py-3 hidden md:table-cell text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap">{locationText}</td>
+                                                    <td className="px-4 py-3 hidden md:table-cell text-xs text-gray-500 dark:text-gray-400 font-mono text-center" dir="ltr">{locationIdsList}</td>
                                                     <td className="px-4 py-3">
                                                         {user.subscription_plan ? (
                                                             <div className="flex flex-col gap-1 items-start">
@@ -1706,6 +1723,7 @@
                                 const province = user.userlocation[0]?.location?.city?.province?.title;
                                 const city = user.userlocation[0]?.location?.city?.title;
                                 const locationText = province && city ? `${province}، ${city}` : '-';
+                                const locationIdsList = user.userlocation?.map(ul => ul.location?.id).filter(id => id).join('، ') || '-';
                                 const firstName = user.firstname || '-';
                                 const prefixLabel = prefixMap[user.prefix] || '-';
                                 const isActive = user.subscription_plan ? isSubscriptionActive(user.subscription_start_date, user.subscription_plan.duration_days) : false;
@@ -1738,6 +1756,10 @@
                                             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                                 <i className="fa-solid fa-location-dot w-5 text-center text-gray-400"></i>
                                                 <span>{locationText}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                                                <i className="fa-solid fa-map-pin w-5 text-center text-gray-400"></i>
+                                                <span>شناسه آدرس: <span className="font-mono text-xs" dir="ltr">{locationIdsList}</span></span>
                                             </div>
                                             <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
                                                 <i className="fa-solid fa-crown w-5 text-center text-yellow-500"></i>
